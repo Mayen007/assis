@@ -20,8 +20,11 @@ $sql = '
 $params = [];
 
 if ($search !== '') {
-    $sql .= ' WHERE c.FullName LIKE :q OR c.PhoneNumber LIKE :q OR c.Email LIKE :q ';
-    $params[':q'] = "%$search%";
+    $sql .= ' WHERE c.FullName LIKE :name OR c.PhoneNumber LIKE :phone OR c.Email LIKE :email ';
+    $searchTerm = "%$search%";
+    $params[':name'] = $searchTerm;
+    $params[':phone'] = $searchTerm;
+    $params[':email'] = $searchTerm;
 }
 
 $sql .= ' GROUP BY c.CustomerID ORDER BY c.DateRegistered DESC';
@@ -115,4 +118,3 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
-

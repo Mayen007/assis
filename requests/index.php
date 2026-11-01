@@ -44,8 +44,13 @@ if ($priorityFilter !== '') {
 }
 
 if ($search !== '') {
-    $sql .= ' AND (c.FullName LIKE :q OR c.PhoneNumber LIKE :q OR p.ProductName LIKE :q OR p.SerialNumber LIKE :q OR sr.IssueDescription LIKE :q) ';
-    $params[':q'] = "%$search%";
+    $sql .= ' AND (c.FullName LIKE :customer_name OR c.PhoneNumber LIKE :phone OR p.ProductName LIKE :product_name OR p.SerialNumber LIKE :serial_number OR sr.IssueDescription LIKE :issue_description) ';
+    $searchTerm = "%$search%";
+    $params[':customer_name'] = $searchTerm;
+    $params[':phone'] = $searchTerm;
+    $params[':product_name'] = $searchTerm;
+    $params[':serial_number'] = $searchTerm;
+    $params[':issue_description'] = $searchTerm;
 }
 
 $sql .= ' ORDER BY sr.DateLogged DESC';
@@ -130,4 +135,3 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
-

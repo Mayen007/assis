@@ -75,8 +75,10 @@ $sql = '
 $params = [];
 
 if ($search !== '') {
-    $sql .= ' AND (u.FullName LIKE :q OR u.Username LIKE :q) ';
-    $params[':q'] = "%$search%";
+    $sql .= ' AND (u.FullName LIKE :full_name OR u.Username LIKE :username) ';
+    $searchTerm = "%$search%";
+    $params[':full_name'] = $searchTerm;
+    $params[':username'] = $searchTerm;
 }
 
 if ($roleFilter !== '' && in_array($roleFilter, ['Admin', 'FrontDesk', 'Technician'])) {

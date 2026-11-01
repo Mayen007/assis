@@ -22,8 +22,12 @@ $sql = '
 $params = [];
 
 if ($search !== '') {
-    $sql .= ' WHERE p.ProductName LIKE :q OR p.Model LIKE :q OR p.SerialNumber LIKE :q OR c.FullName LIKE :q ';
-    $params[':q'] = "%$search%";
+    $sql .= ' WHERE p.ProductName LIKE :product_name OR p.Model LIKE :model OR p.SerialNumber LIKE :serial_number OR c.FullName LIKE :customer_name ';
+    $searchTerm = "%$search%";
+    $params[':product_name'] = $searchTerm;
+    $params[':model'] = $searchTerm;
+    $params[':serial_number'] = $searchTerm;
+    $params[':customer_name'] = $searchTerm;
 }
 
 $sql .= ' ORDER BY p.ProductID DESC';
@@ -127,4 +131,3 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
-

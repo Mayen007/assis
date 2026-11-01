@@ -20,28 +20,60 @@ $db = get_db();
 
 // Handle Payment Status Update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_payment_status'])) {
-    if (verify_csrf()) {
-        $newStatus = trim($_POST['payment_status'] ?? '');
-        if (in_array($newStatus, ['Unpaid', 'Paid', 'Partially Paid'], true)) {
-            $stmt = $db->prepare('UPDATE INVOICE SET PaymentStatus = :status WHERE InvoiceID = :id');
-            $stmt->execute([':status' => $newStatus, ':id' => $invoiceId]);
+    if (!verify_csrf()) {
+        set_flash('danger', 'Security validation failed. Please try again.');
+        header('Location: ' . base_url('billing/view.php?id=' . $invoiceId));
+        exit;
+    }
 
-            // If Paid, we can also close the request if completed
-            if ($newStatus === 'Paid') {
-                $closeStmt = $db->prepare('
-                    UPDATE SERVICE_REQUEST sr
-                    JOIN INVOICE i ON sr.RequestID = i.RequestID
-                    SET sr.Status = \'Closed\'
-                    WHERE i.InvoiceID = :iid AND sr.Status = \'Completed\'
-                ');
-                $closeStmt->execute([':iid' => $invoiceId]);
-            }
+    $newStatus = trim($_POST['payment_status'] ?? '');
+    if (!in_array($newStatus, ['Unpaid', 'Paid', 'Partially Paid'], true)) {
+        set_flash('danger', 'Invalid payment status.');
+        header('Location: ' . base_url('billing/view.php?id=' . $invoiceId));
+        exit;
+    }
 
-            set_flash('success', 'Payment status updated to: ' . $newStatus);
-            header('Location: ' . base_url('billing/view.php?id=' . $invoiceId));
+    $db->beginTransaction();
+    try {
+        $stmt = $db->prepare('
+            SELECT i.RequestID, sr.Status AS RequestStatus
+            FROM INVOICE i
+            JOIN SERVICE_REQUEST sr ON sr.RequestID = i.RequestID
+            WHERE i.InvoiceID = :id
+            FOR UPDATE
+        ');
+        $stmt->execute([':id' => $invoiceId]);
+        $invoiceStatus = $stmt->fetch();
+
+        if (!$invoiceStatus) {
+            $db->rollBack();
+            set_flash('danger', 'Invoice not found.');
+            header('Location: ' . base_url('billing/index.php'));
             exit;
         }
+
+        $stmt = $db->prepare('UPDATE INVOICE SET PaymentStatus = :status WHERE InvoiceID = :id');
+        $stmt->execute([':status' => $newStatus, ':id' => $invoiceId]);
+
+        if ($newStatus === 'Paid' && $invoiceStatus['RequestStatus'] === 'Completed') {
+            $stmt = $db->prepare('UPDATE SERVICE_REQUEST SET Status = \'Closed\' WHERE RequestID = :rid');
+            $stmt->execute([':rid' => $invoiceStatus['RequestID']]);
+        } elseif ($newStatus !== 'Paid' && $invoiceStatus['RequestStatus'] === 'Closed') {
+            $stmt = $db->prepare('UPDATE SERVICE_REQUEST SET Status = \'Completed\' WHERE RequestID = :rid');
+            $stmt->execute([':rid' => $invoiceStatus['RequestID']]);
+        }
+
+        $db->commit();
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $e;
     }
+
+    set_flash('success', 'Payment status updated to: ' . $newStatus);
+    header('Location: ' . base_url('billing/view.php?id=' . $invoiceId));
+    exit;
 }
 
 // Fetch invoice and associated details

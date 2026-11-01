@@ -114,8 +114,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_repair'])) {
 
                     $deductStock = $db->prepare('
                         UPDATE SPARE_PART
-                        SET QuantityInStock = QuantityInStock - :qty
-                        WHERE PartID = :pid AND QuantityInStock >= :qty
+                        SET QuantityInStock = QuantityInStock - :deduct_qty
+                        WHERE PartID = :pid AND QuantityInStock >= :minimum_qty
                     ');
 
                     $getPartPrice = $db->prepare('SELECT UnitPrice, QuantityInStock, PartName FROM SPARE_PART WHERE PartID = :pid FOR UPDATE');
@@ -141,9 +141,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_repair'])) {
 
                             // Deduct from stock
                             $deductStock->execute([
-                                ':qty' => $qty,
+                                ':deduct_qty' => $qty,
                                 ':pid' => $partId,
+                                ':minimum_qty' => $qty,
                             ]);
+                            if ($deductStock->rowCount() !== 1) {
+                                throw new Exception('Unable to deduct spare part stock.');
+                            }
 
                             $totalPartsCost += ((float)$partRow['UnitPrice'] * $qty);
                         }

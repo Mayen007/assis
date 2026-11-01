@@ -31,8 +31,11 @@ if ($paymentStatus !== '') {
 }
 
 if ($search !== '') {
-    $sql .= ' AND (c.FullName LIKE :q OR c.PhoneNumber LIKE :q OR p.ProductName LIKE :q) ';
-    $params[':q'] = "%$search%";
+    $sql .= ' AND (c.FullName LIKE :customer_name OR c.PhoneNumber LIKE :phone OR p.ProductName LIKE :product_name) ';
+    $searchTerm = "%$search%";
+    $params[':customer_name'] = $searchTerm;
+    $params[':phone'] = $searchTerm;
+    $params[':product_name'] = $searchTerm;
 }
 
 $sql .= ' ORDER BY i.DateIssued DESC';

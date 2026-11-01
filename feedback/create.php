@@ -37,6 +37,12 @@ if (!$req) {
     exit;
 }
 
+if (!in_array($req['Status'], ['Completed', 'Closed'], true)) {
+    set_flash('warning', 'Feedback can only be recorded for completed service tickets.');
+    header('Location: ' . base_url('requests/view.php?id=' . $requestId));
+    exit;
+}
+
 // Check if feedback already submitted
 $check = $db->prepare('SELECT FeedbackID FROM FEEDBACK WHERE RequestID = :rid LIMIT 1');
 $check->execute([':rid' => $requestId]);
@@ -116,7 +122,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <label class="form-label d-block fw-bold mb-2">Overall Service Satisfaction Rating (1 to 5 Stars)</label>
                         <div class="btn-group" role="group" aria-label="Rating Selection">
                             <?php for ($r = 1; $r <= 5; $r++): ?>
-                                <input type="radio" class="btn-check" name="rating" id="rating<?= $r ?>" value="<?= $r ?>" autocomplete="off" <?= $r === 5 ? 'checked' : '' ?>>
+                                <input type="radio" class="btn-check" name="rating" id="rating<?= $r ?>" value="<?= $r ?>" autocomplete="off" <?= $r === 1 ? 'required' : '' ?>>
                                 <label class="btn btn-outline-warning text-dark px-3 py-2" for="rating<?= $r ?>">
                                     <span class="fs-5 fw-bold"><?= $r ?> <i class="bi bi-star-fill text-warning"></i></span>
                                 </label>
