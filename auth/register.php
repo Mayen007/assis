@@ -41,8 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $fullName = trim($_POST['full_name'] ?? '');
         $username = trim($_POST['username'] ?? '');
-        $password = trim($_POST['password'] ?? '');
-        $confirmPassword = trim($_POST['confirm_password'] ?? '');
+        $password = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
+        $confirmPassword = is_string($_POST['confirm_password'] ?? null) ? $_POST['confirm_password'] : '';
 
         if ($fullName === '' || $username === '' || $password === '' || $confirmPassword === '') {
             $error = 'All fields are required.';
@@ -50,8 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Username must be between 3 and 50 characters.';
         } elseif (!preg_match('/^[a-zA-Z0-9._-]+$/', $username)) {
             $error = 'Username can only contain letters, numbers, periods, hyphens, and underscores.';
-        } elseif (strlen($password) < 6) {
-            $error = 'Password must be at least 6 characters long.';
+        } elseif (($passwordError = password_policy_error($password)) !== null) {
+            $error = $passwordError;
         } elseif ($password !== $confirmPassword) {
             $error = 'Passwords do not match.';
         } else {
@@ -192,15 +192,16 @@ $pageTitle = 'Initial Administrator Setup';
             <label class="form-label" for="password">Password</label>
             <div class="input-group">
                 <span class="input-group-text bg-light"><i class="bi bi-lock"></i></span>
-                <input type="password" class="form-control" id="password" name="password" placeholder="At least 6 characters" required>
+                <input type="password" class="form-control" id="password" name="password" minlength="12" maxlength="72" placeholder="At least 12 characters" required>
             </div>
+            <div class="form-text">Use 12 or more characters; passwords are limited to 72 bytes.</div>
         </div>
 
         <div class="mb-3">
             <label class="form-label" for="confirm_password">Confirm Password</label>
             <div class="input-group">
                 <span class="input-group-text bg-light"><i class="bi bi-check2-circle"></i></span>
-                <input type="password" class="form-control" id="confirm_password" name="confirm_password" placeholder="Repeat password" required>
+                <input type="password" class="form-control" id="confirm_password" name="confirm_password" minlength="12" maxlength="72" placeholder="Repeat password" required>
             </div>
         </div>
 

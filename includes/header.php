@@ -194,9 +194,12 @@ $flash = get_flash();
                                         <hr class="dropdown-divider">
                                     </li>
                                     <li>
-                                        <a class="dropdown-item text-danger" href="<?= base_url('auth/logout.php') ?>">
-                                            <i class="bi bi-box-arrow-right me-2"></i> Sign Out
-                                        </a>
+                                        <form method="POST" action="<?= base_url('auth/logout.php') ?>">
+                                            <?= csrf_field() ?>
+                                            <button type="submit" class="dropdown-item text-danger">
+                                                <i class="bi bi-box-arrow-right me-2"></i> Sign Out
+                                            </button>
+                                        </form>
                                     </li>
                                 </ul>
                             </li>
@@ -204,9 +207,12 @@ $flash = get_flash();
 
                         <!-- Mobile Drawer Sign Out -->
                         <div class="drawer-footer d-lg-none mt-auto pt-3 border-top">
-                            <a class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center" href="<?= base_url('auth/logout.php') ?>">
-                                <i class="bi bi-box-arrow-right me-2"></i> Sign Out
-                            </a>
+                            <form method="POST" action="<?= base_url('auth/logout.php') ?>">
+                                <?= csrf_field() ?>
+                                <button type="submit" class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center">
+                                    <i class="bi bi-box-arrow-right me-2"></i> Sign Out
+                                </button>
+                            </form>
                         </div>
                     </div>
                 </div>

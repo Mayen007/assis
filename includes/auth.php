@@ -101,21 +101,128 @@ function login_user(array $user): void {
 }
 
 /**
+ * Returns a validation message for a password that violates the bcrypt policy.
+ */
+function password_policy_error(string $password): ?string {
+    if (strlen($password) < 12) {
+        return 'Password must be at least 12 characters long.';
+    }
+
+    if (strlen($password) > 72) {
+        return 'Password must not exceed 72 bytes.';
+    }
+
+    return null;
+}
+
+/**
+ * Starts a serialized login attempt and returns its locked rate-limit keys.
+ * A null result means at least one key is currently locked.
+ */
+function begin_login_attempt(PDO $db, string $username, string $ipAddress): ?array {
+    $keys = [
+        hash('sha256', 'username:' . strtolower(trim($username))),
+        hash('sha256', 'ip:' . $ipAddress),
+    ];
+    sort($keys, SORT_STRING);
+
+    $db->exec("
+        DELETE FROM LOGIN_ATTEMPTS
+        WHERE WindowStartedAt < UTC_TIMESTAMP() - INTERVAL 1 DAY
+          AND (LockedUntil IS NULL OR LockedUntil < UTC_TIMESTAMP())
+    ");
+    $db->beginTransaction();
+
+    try {
+        $insert = $db->prepare("
+            INSERT INTO LOGIN_ATTEMPTS (AttemptKey, FailedAttempts, WindowStartedAt, LockedUntil)
+            VALUES (:attempt_key, 0, UTC_TIMESTAMP(), NULL)
+            ON DUPLICATE KEY UPDATE AttemptKey = VALUES(AttemptKey)
+        ");
+        $select = $db->prepare("
+            SELECT FailedAttempts,
+                   WindowStartedAt < UTC_TIMESTAMP() - INTERVAL 15 MINUTE AS WindowExpired,
+                   LockedUntil > UTC_TIMESTAMP() AS IsLocked
+            FROM LOGIN_ATTEMPTS
+            WHERE AttemptKey = :attempt_key
+            FOR UPDATE
+        ");
+        $reset = $db->prepare("
+            UPDATE LOGIN_ATTEMPTS
+            SET FailedAttempts = 0, WindowStartedAt = UTC_TIMESTAMP(), LockedUntil = NULL
+            WHERE AttemptKey = :attempt_key
+        ");
+
+        foreach ($keys as $key) {
+            $insert->execute([':attempt_key' => $key]);
+            $select->execute([':attempt_key' => $key]);
+            $attempt = $select->fetch();
+
+            if ((int)$attempt['IsLocked'] === 1) {
+                $db->rollBack();
+                return null;
+            }
+
+            if ((int)$attempt['WindowExpired'] === 1) {
+                $reset->execute([':attempt_key' => $key]);
+            }
+        }
+
+        return $keys;
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        throw $e;
+    }
+}
+
+/**
+ * Commits a failed login count or clears the counters after successful login.
+ */
+function finish_login_attempt(PDO $db, array $keys, bool $isSuccessful): void {
+    if ($isSuccessful) {
+        $delete = $db->prepare('DELETE FROM LOGIN_ATTEMPTS WHERE AttemptKey = :attempt_key');
+        foreach ($keys as $key) {
+            $delete->execute([':attempt_key' => $key]);
+        }
+    } else {
+        $select = $db->prepare('SELECT FailedAttempts FROM LOGIN_ATTEMPTS WHERE AttemptKey = :attempt_key FOR UPDATE');
+        $update = $db->prepare("
+            UPDATE LOGIN_ATTEMPTS
+            SET FailedAttempts = :failed_attempts,
+                LockedUntil = IF(:should_lock = 1, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE), NULL)
+            WHERE AttemptKey = :attempt_key
+        ");
+        foreach ($keys as $key) {
+            $select->execute([':attempt_key' => $key]);
+            $failedAttempts = (int)$select->fetchColumn() + 1;
+            $update->execute([
+                ':failed_attempts' => $failedAttempts,
+                ':should_lock' => $failedAttempts >= 5 ? 1 : 0,
+                ':attempt_key' => $key,
+            ]);
+        }
+    }
+
+    $db->commit();
+}
+
+/**
  * Terminates user session.
  */
 function logout_user(): void {
     $_SESSION = [];
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
-        setcookie(
-            session_name(),
-            '',
-            time() - 42000,
-            $params['path'],
-            $params['domain'],
-            $params['secure'],
-            $params['httponly']
-        );
+        setcookie(session_name(), '', [
+            'expires' => time() - 42000,
+            'path' => $params['path'],
+            'domain' => $params['domain'],
+            'secure' => $params['secure'],
+            'httponly' => $params['httponly'],
+            'samesite' => $params['samesite'] ?? 'Lax',
+        ]);
     }
     session_destroy();
 }

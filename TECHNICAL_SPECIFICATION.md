@@ -65,7 +65,7 @@ As established in Section 1.3 of [sameera.md](./sameera.md), technical implement
   - Customer registry and direct linkage of customer products and warranty terms.
   - Service request logging, assignment, and status lifecycle tracking.
   - Spare parts inventory catalog with automatic deduction on job completion and low-stock reorder alerts.
-  - Invoice generation (Labour Cost + Consumed Parts) and status-based payment tracking (`Unpaid`, `Paid`, `Partially Paid`).
+  - Invoice generation (Labour Cost + Consumed Parts) and status-only payment tracking (`Unpaid`, `Paid`, `Partially Paid`); payment transactions are not recorded.
   - Customer feedback logging (Rating 1–5 and qualitative comments).
   - Tabular management reports (service status, technician workload, inventory balances, feedback).
 - **Out-of-Scope (Strictly Excluded):**
@@ -275,7 +275,7 @@ stateDiagram-v2
   - `In Progress` $\rightarrow$ `Completed`: Requires `SERVICE_RECORD` creation (recording `ActionsTaken` and `LabourCost`).
   - `Completed` $\rightarrow$ `Closed`: Triggered when associated `INVOICE` is marked `'Paid'` and optional `FEEDBACK` recorded.
 
-The system stores the request's current `Status` and `TechnicianID`, along with request and service-record dates. It does not keep a separate event log of status changes or technician assignments, so previous statuses, prior assignees, change timestamps, and the users who made those changes cannot be reconstructed. Customer service history refers to linked requests and their service records, not a full audit history.
+The implementation stores only each request's current `Status` and `TechnicianID`, plus request and service-record dates. It does not store status-change or assignment/reassignment events, previous values, a user ID for each change, or a timestamp for each change. Therefore, prior statuses, prior assignees, who performed a change, and when it occurred cannot be reconstructed. “Customer service history” means the customer's linked requests and service records only; it is not a full audit trail or status history. The proposal's statement about timestamped records and user attributions is an intended benefit, not a capability currently implemented.
 
 ### 5.2 Inventory Deduction & Atomic Transaction
 When a technician submits the repair record with spare parts used, the system executes an atomic transaction in MySQL:
@@ -300,7 +300,7 @@ $$\text{AmountDue} = \text{SERVICE\_RECORD.LabourCost} + \text{PartsTotal}$$
 
 The calculated `AmountDue` is committed to `INVOICE` with default `PaymentStatus = 'Unpaid'`.
 
-Payment tracking is status-based only. Staff can change an invoice's status to `Unpaid`, `Paid`, or `Partially Paid`, but the system does not record individual payment transactions, amounts received, dates, methods, or an outstanding balance. Consequently, `Partially Paid` is an informational status and does not represent a reconciled partial-payment record. Transaction-level payment recording is outside the current project scope.
+Payment tracking is status-based only. Staff can change an invoice's status to `Unpaid`, `Paid`, or `Partially Paid`, but the system does not record individual payment transactions, amounts received, payment dates, methods, or transaction references. It therefore cannot calculate how much has been paid or remains due. `Partially Paid` is an informational status, not a reconciled partial-payment record. Transaction-level tracking would require a separate `PAYMENT` table and workflow; that is outside the current project scope.
 
 ### 5.4 Management Reporting Engine
 In accordance with Section 5.4, the reporting engine generates formatted, tabular data with export/print layouts:
@@ -332,8 +332,10 @@ In accordance with Section 5.3 and Figures 5.2–5.5 in [sameera.md](./sameera.m
 Directly satisfying Section 4.1.2 of the proposal:
 
 1. **Authentication & Session Security:**
-   - Password encryption using PHP `password_hash()` with `PASSWORD_BCRYPT`.
-   - Secure HTTP session management (`session_regenerate_id()`, timeout on idle).
+   - Password hashing using PHP `password_hash()` with `PASSWORD_BCRYPT`; new and reset passwords require at least 12 characters and no more than 72 bytes.
+   - Login attempts are limited to five failures per normalized username or client IP per 15-minute window.
+   - Session IDs use strict mode and cookie-only transport. Session cookies use `HttpOnly` and `SameSite=Lax`, and are marked `Secure` over HTTPS or when `APP_ENV=production`.
+   - Production deployment requires HTTPS; reverse-proxy deployments must configure `APP_ENV=production`.
 2. **SQL Injection Defense:**
    - Universal implementation of PHP Data Objects (PDO) with strict parameterized prepared statements. Zero dynamic raw query concatenation.
 3. **Cross-Site Scripting (XSS) Prevention:**

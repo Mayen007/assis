@@ -31,7 +31,7 @@ after-sales-system/
 ├── customers/
 │   ├── index.php              # Customer directory with search & product counter
 │   ├── create.php             # Customer registration form (Figure 5.3 in proposal)
-│   └── view.php               # Customer profile with linked products & service history
+│   └── view.php               # Customer profile with linked requests and service records (not an audit history)
 ├── products/
 │   ├── index.php              # Equipment registry with warranty status indicators
 │   └── create.php             # Product registration linked to customer & warranty terms
@@ -76,7 +76,11 @@ C:\xampp\htdocs\after-sales-system
 2. Open **phpMyAdmin** in your browser (`http://localhost/phpmyadmin`).
 3. Click on **Import** and select [`database/schema.sql`](./database/schema.sql) (Creates `assis_db` and all relational tables).
 
-   *(Note: Alternatively, ASSIS automatically creates the database and executes `schema.sql` on first launch).*
+   *(Note: Alternatively, ASSIS automatically creates the database and executes `schema.sql` on first launch only when the configured database does not exist.)*
+
+   If the database already exists but its tables are missing, automatic initialization will not run. Import [`database/schema.sql`](./database/schema.sql) manually through phpMyAdmin to create the tables. The schema targets `assis_db`, so make sure this matches the database configured by `DB_NAME`.
+
+   For an existing database, also run [`database/migrations/001_create_login_attempts.sql`](./database/migrations/001_create_login_attempts.sql) in phpMyAdmin before using the login page.
 
 ### Step 3: First-Run Administrator Registration
 1. Configure a random `INITIAL_ADMIN_SETUP_KEY` of at least 32 characters for PHP/Apache. For XAMPP, add `SetEnv INITIAL_ADMIN_SETUP_KEY "your-long-random-key"` to the Apache configuration and restart Apache. Do not commit the key.
@@ -87,6 +91,14 @@ C:\xampp\htdocs\after-sales-system
 3. The system detects a fresh installation (0 users) and presents the **Administrator Setup** screen (`/auth/register.php`).
 4. Enter the configured setup key, **Full Name**, **Username**, and **Password** to register the primary Administrator account. Setup is disabled if the key is not configured and closes after an account is created.
 5. Sign in to access the system. You can then register Front Desk and Technician staff via **Settings > Staff User Management** (`/users/index.php`).
+
+### Production security
+
+- Serve the application only over HTTPS. In production, set `APP_ENV=production` in the PHP/Apache environment so session cookies are marked `Secure`, including when TLS terminates at a trusted reverse proxy.
+- If deployed behind a reverse proxy, configure the web server to populate `REMOTE_ADDR` with the verified client address; the application does not trust user-supplied forwarding headers.
+- Session cookies use `HttpOnly`, `SameSite=Lax`, strict session IDs, and cookie-only transport.
+- Login attempts are limited to five failures per username or client IP in a 15-minute window; locked buckets expire after 15 minutes. Ensure `LOGIN_ATTEMPTS` exists by importing the schema or applying the migration above.
+- New and reset passwords must be at least 12 characters and no more than 72 bytes (the current bcrypt input limit). Existing accounts are not forcibly reset.
 
 ---
 

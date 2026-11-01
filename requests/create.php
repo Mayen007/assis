@@ -60,36 +60,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (!$productRow) {
                 $error = 'The selected product does not exist or is not registered to the selected customer.';
-            } elseif ($technicianId && ($assignmentError = validate_technician_assignment($db, $technicianId, $productId, $issueDescription))) {
-                $error = $assignmentError;
             } else {
                 try {
-                    // If technician assigned, status can start as 'In Progress', else 'Pending'
-                    $initialStatus = $technicianId ? 'In Progress' : 'Pending';
+                    // The technician is locked before the capacity check so the
+                    // check and the INSERT that consumes a slot are atomic.
+                    begin_assignment_transaction($db);
 
-                    $stmt = $db->prepare('
-                        INSERT INTO SERVICE_REQUEST (CustomerID, ProductID, TechnicianID, DateLogged, IssueDescription, Priority, Status)
-                        VALUES (:cid, :pid, :tid, NOW(), :desc, :priority, :status)
-                    ');
-                    $stmt->execute([
-                        ':cid'      => $customerId,
-                        ':pid'      => $productId,
-                        ':tid'      => $technicianId,
-                        ':desc'     => $issueDescription,
-                        ':priority' => $priority,
-                        ':status'   => $initialStatus,
-                    ]);
-
-                    $requestId = $db->lastInsertId();
-
+                    $assignmentError = null;
                     if ($technicianId) {
-                        sync_technician_availability($db, $technicianId);
+                        $assignmentError = validate_technician_assignment($db, $technicianId, $productId, $issueDescription);
                     }
 
-                    set_flash('success', 'Service Request #SR' . str_pad((string)$requestId, 4, '0', STR_PAD_LEFT) . ' logged successfully.');
-                    header('Location: ' . base_url('requests/view.php?id=' . $requestId));
-                    exit;
-                } catch (Exception $e) {
+                    if ($assignmentError !== null) {
+                        $db->rollBack();
+                        $error = $assignmentError;
+                    } else {
+                        // If technician assigned, status can start as 'In Progress', else 'Pending'
+                        $initialStatus = $technicianId ? 'In Progress' : 'Pending';
+
+                        $stmt = $db->prepare('
+                            INSERT INTO SERVICE_REQUEST (CustomerID, ProductID, TechnicianID, DateLogged, IssueDescription, Priority, Status)
+                            VALUES (:cid, :pid, :tid, NOW(), :desc, :priority, :status)
+                        ');
+                        $stmt->execute([
+                            ':cid'      => $customerId,
+                            ':pid'      => $productId,
+                            ':tid'      => $technicianId,
+                            ':desc'     => $issueDescription,
+                            ':priority' => $priority,
+                            ':status'   => $initialStatus,
+                        ]);
+
+                        $requestId = (int)$db->lastInsertId();
+
+                        if ($technicianId) {
+                            sync_technician_availability($db, $technicianId);
+                        }
+
+                        $db->commit();
+                        set_flash('success', 'Service Request #SR' . str_pad((string)$requestId, 4, '0', STR_PAD_LEFT) . ' logged successfully.');
+                        header('Location: ' . base_url('requests/view.php?id=' . $requestId));
+                        exit;
+                    }
+                } catch (Throwable $e) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
                     $error = 'Failed to create service request: ' . $e->getMessage();
                 }
             }

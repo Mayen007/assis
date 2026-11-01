@@ -58,24 +58,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['assign_technician']))
     if (verify_csrf()) {
         $techId = (int)$_POST['technician_id'];
         if ($techId > 0) {
-            $assignmentError = validate_technician_assignment($db, $techId, (int)$req['ProductID'], $req['IssueDescription'], $requestId);
+            try {
+                // Validation and the UPDATE run in one locked transaction so the
+                // capacity check cannot be bypassed by a concurrent assignment.
+                $assignmentError = assign_technician_to_request($db, $requestId, $techId);
+            } catch (Throwable $e) {
+                error_log('Technician assignment failed: ' . $e->getMessage());
+                $assignmentError = 'Technician assignment could not be completed because the ticket or technician was updated concurrently. Please try again.';
+            }
 
             if ($assignmentError) {
                 set_flash('danger', $assignmentError);
             } else {
-                $previousTechId = (int)$req['TechnicianID'];
-                $update = $db->prepare('
-                    UPDATE SERVICE_REQUEST
-                    SET TechnicianID = :tid, Status = CASE WHEN Status = \'Pending\' THEN \'In Progress\' ELSE Status END
-                    WHERE RequestID = :rid
-                ');
-                $update->execute([':tid' => $techId, ':rid' => $requestId]);
-
-                sync_technician_availability($db, $techId);
-                if ($previousTechId && $previousTechId !== $techId) {
-                    sync_technician_availability($db, $previousTechId);
-                }
-
                 set_flash('success', 'Technician assigned successfully.');
             }
             header('Location: ' . base_url('requests/view.php?id=' . $requestId));
@@ -307,7 +301,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
                 <?php endif; ?>
 
-                <?php if (has_role(['Admin', 'FrontDesk'])): ?>
+                <?php if (has_role(['Admin', 'FrontDesk']) && in_array($req['Status'], ['Pending', 'In Progress'], true)): ?>
                     <form method="POST" action="">
                         <?= csrf_field() ?>
                         <input type="hidden" name="assign_technician" value="1">
@@ -336,6 +330,8 @@ require_once __DIR__ . '/../includes/header.php';
                             <button type="submit" class="btn btn-sm btn-primary">Assign</button>
                         </div>
                     </form>
+                <?php elseif (in_array($req['Status'], ['Completed', 'Closed'], true)): ?>
+                    <p class="text-muted small mb-0">Technician assignment is locked for finalized requests.</p>
                 <?php endif; ?>
             </div>
         </div>

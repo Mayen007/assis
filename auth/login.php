@@ -25,27 +25,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf()) {
         $error = 'Invalid security token. Please refresh and try again.';
     } else {
-        $username = trim($_POST['username'] ?? '');
-        $password = trim($_POST['password'] ?? '');
+        $usernameInput = $_POST['username'] ?? '';
+        $passwordInput = $_POST['password'] ?? '';
+        $username = is_string($usernameInput) ? trim($usernameInput) : '';
+        $password = is_string($passwordInput) ? $passwordInput : '';
 
         if ($username === '' || $password === '') {
             $error = 'Please enter both username and password.';
+        } elseif (strlen($username) > 50 || strlen($password) > 1024) {
+            $error = 'Invalid username or password.';
         } else {
+            $attemptKeys = null;
             try {
-                $stmt = $db->prepare('SELECT * FROM USERS WHERE LOWER(Username) = LOWER(:username) AND IsActive = 1 LIMIT 1');
-                $stmt->execute([':username' => $username]);
-                $user = $stmt->fetch();
+                $attemptKeys = begin_login_attempt(
+                    $db,
+                    $username,
+                    (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown')
+                );
 
-                if ($user && password_verify($password, $user['PasswordHash'])) {
-                    login_user($user);
-                    set_flash('success', 'Welcome back, ' . $user['FullName'] . '!');
-                    header('Location: ' . base_url('dashboard.php'));
-                    exit;
+                if ($attemptKeys === null) {
+                    $error = 'Too many sign-in attempts. Please try again in 15 minutes.';
+                } else {
+                    $stmt = $db->prepare('SELECT * FROM USERS WHERE LOWER(Username) = LOWER(:username) AND IsActive = 1 LIMIT 1');
+                    $stmt->execute([':username' => $username]);
+                    $user = $stmt->fetch();
+                    $dummyHash = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.';
+                    $passwordMatches = password_verify($password, $user['PasswordHash'] ?? $dummyHash);
+
+                    if ($user && $passwordMatches) {
+                        finish_login_attempt($db, $attemptKeys, true);
+                        login_user($user);
+                        set_flash('success', 'Welcome back, ' . $user['FullName'] . '!');
+                        header('Location: ' . base_url('dashboard.php'));
+                        exit;
+                    }
+
+                    finish_login_attempt($db, $attemptKeys, false);
+                    $error = 'Invalid username or password.';
                 }
-
-                $error = 'Invalid username or password.';
-            } catch (Exception $e) {
-                $error = 'Authentication service error: ' . $e->getMessage();
+            } catch (Throwable $e) {
+                if ($db->inTransaction()) {
+                    $db->rollBack();
+                }
+                error_log('Login authentication error: ' . $e->getMessage());
+                $error = 'Authentication is temporarily unavailable. Please try again later.';
             }
         }
     }
@@ -105,7 +128,7 @@ $pageTitle = 'Sign In';
             <label class="form-label" for="username">Username</label>
             <div class="input-group">
                 <span class="input-group-text bg-light"><i class="bi bi-person"></i></span>
-                <input type="text" class="form-control" id="username" name="username" placeholder="Enter your username" required autofocus value="<?= e($_POST['username'] ?? '') ?>">
+                <input type="text" class="form-control" id="username" name="username" maxlength="50" placeholder="Enter your username" required autofocus value="<?= e(is_string($_POST['username'] ?? null) ? $_POST['username'] : '') ?>">
             </div>
         </div>
 
@@ -113,7 +136,7 @@ $pageTitle = 'Sign In';
             <label class="form-label" for="password">Password</label>
             <div class="input-group">
                 <span class="input-group-text bg-light"><i class="bi bi-lock"></i></span>
-                <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password" required>
+                <input type="password" class="form-control" id="password" name="password" maxlength="1024" placeholder="Enter your password" required>
             </div>
         </div>
 

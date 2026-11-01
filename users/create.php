@@ -22,8 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $fullName = trim($_POST['full_name'] ?? '');
         $username = strtolower(trim($_POST['username'] ?? ''));
         $role = trim($_POST['role'] ?? '');
-        $password = $_POST['password'] ?? '';
-        $confirmPassword = $_POST['confirm_password'] ?? '';
+        $password = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
+        $confirmPassword = is_string($_POST['confirm_password'] ?? null) ? $_POST['confirm_password'] : '';
         $techOption = trim($_POST['tech_option'] ?? 'existing');
         $existingTechId = !empty($_POST['technician_id']) ? (int)$_POST['technician_id'] : null;
         $newTechSpec = trim($_POST['new_tech_specialization'] ?? '');
@@ -36,8 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Username must be 3-30 characters long and contain only lowercase letters, numbers, dots, dashes, or underscores.';
         } elseif (!in_array($role, ['Admin', 'FrontDesk', 'Technician'])) {
             $error = 'Invalid role selected.';
-        } elseif (strlen($password) < 6) {
-            $error = 'Password must be at least 6 characters in length.';
+        } elseif (($passwordError = password_policy_error($password)) !== null) {
+            $error = $passwordError;
         } elseif ($password !== $confirmPassword) {
             $error = 'Passwords do not match.';
         } else {
@@ -207,12 +207,13 @@ require_once __DIR__ . '/../includes/header.php';
 
                     <div class="col-12 col-md-6">
                         <label class="form-label" for="password">Initial Password <span class="text-danger">*</span></label>
-                        <input type="password" name="password" id="password" class="form-control" placeholder="Minimum 6 characters" required minlength="6">
+                        <input type="password" name="password" id="password" class="form-control" placeholder="Minimum 12 characters" required minlength="12" maxlength="72">
+                        <div class="form-text">Use 12 or more characters; passwords are limited to 72 bytes.</div>
                     </div>
 
                     <div class="col-12 col-md-6">
                         <label class="form-label" for="confirm_password">Confirm Password <span class="text-danger">*</span></label>
-                        <input type="password" name="confirm_password" id="confirm_password" class="form-control" placeholder="Re-enter password" required minlength="6">
+                        <input type="password" name="confirm_password" id="confirm_password" class="form-control" placeholder="Re-enter password" required minlength="12" maxlength="72">
                     </div>
 
                     <div class="col-12">

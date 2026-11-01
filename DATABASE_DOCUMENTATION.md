@@ -7,7 +7,7 @@ This is the as-built database reference generated from [`database/schema.sql`](.
 - Database: `assis_db`
 - Engine: InnoDB
 - Character set and collation: `utf8mb4` / `utf8mb4_unicode_ci`
-- Tables: 11, including the application authentication table `USERS`
+- Tables: 12, including the application authentication table `USERS` and login throttling table `LOGIN_ATTEMPTS`
 - Monetary values use `DECIMAL(10,2)`; the application displays them in KES.
 
 ## Entity-relationship diagram
@@ -66,6 +66,12 @@ erDiagram
         TINYINT IsActive
         DATETIME CreatedAt
     }
+    LOGIN_ATTEMPTS {
+        CHAR AttemptKey PK
+        SMALLINT FailedAttempts
+        DATETIME WindowStartedAt
+        DATETIME LockedUntil
+    }
     SERVICE_REQUEST {
         INT RequestID PK
         INT CustomerID FK
@@ -123,6 +129,7 @@ In the diagram, `PK` and `FK` mark primary and foreign keys; optional foreign-ke
 | `WARRANTY` | Warranty dates and terms for a product. The schema allows multiple warranty rows per product. |
 | `TECHNICIAN` | Technician identity, specialization, contact number, and current availability. |
 | `USERS` | Login credentials, role, activation flag, and optional link to a technician profile. |
+| `LOGIN_ATTEMPTS` | Hashed username/IP throttling buckets, failed-attempt count, active window, and lock expiry; contains no foreign-key relationship to user records. |
 | `SERVICE_REQUEST` | Customer/product repair ticket, its current technician assignment, priority, current status, and logged date. |
 | `SERVICE_RECORD` | Repair actions, completion date, and labour cost for a request. At most one record is allowed per request. |
 | `SPARE_PART` | Part catalogue, stock quantity, reorder threshold, and unit selling price. |
@@ -190,6 +197,15 @@ The schema also declares `uk_product_customer` as a unique composite key on (`Pr
 | `RelatedTechnicianID` | `INT` | Yes | FK to `TECHNICIAN.TechnicianID`, delete sets NULL | Optional linked technician profile. |
 | `IsActive` | `TINYINT(1)` | No | `1` | Whether the account is active. |
 | `CreatedAt` | `DATETIME` | No | `CURRENT_TIMESTAMP` | Account creation timestamp. |
+
+### `LOGIN_ATTEMPTS`
+
+| Column | Type | Null | Key / default / rule | Description |
+|---|---|---|---|---|
+| `AttemptKey` | `CHAR(64)` | No | PK, ASCII binary collation | SHA-256 key for a normalized username or client IP bucket. |
+| `FailedAttempts` | `SMALLINT UNSIGNED` | No | `0` | Failed attempts in the current window. |
+| `WindowStartedAt` | `DATETIME` | No | — | UTC start time for the current 15-minute window. |
+| `LockedUntil` | `DATETIME` | Yes | — | UTC expiry of the lock after five failed attempts. |
 
 ### `SERVICE_REQUEST`
 
@@ -278,12 +294,13 @@ There is no unique constraint on (`RecordID`, `PartID`), so the database does no
 - Deleting a technician preserves requests and user accounts by setting their technician references to NULL. Updating a referenced product/customer pair cascades through `fk_request_product_customer`.
 - Deleting a service request cascades to its service record, invoice, and feedback. Deleting a service record cascades to its parts-used rows.
 - `SPARE_PART.QuantityInStock` cannot be negative; `PARTS_USED.QuantityUsed` must be positive; `FEEDBACK.Rating` must be from 1 through 5.
-- The schema has no status-change or assignment-event history table. `SERVICE_REQUEST.Status` and `TechnicianID` contain current values only.
+- No request status or technician-assignment event table exists. `SERVICE_REQUEST.Status` and `TechnicianID` contain current values only; there are no previous-value fields, per-change timestamps, or user IDs identifying who made a change.
+- `LOGIN_ATTEMPTS` contains expiring authentication-throttling counters only; it is not an authentication or account activity audit log.
 
 ## Design and operational limits reflected by the schema
 
-- Payment recording is status-based: `INVOICE` has `AmountDue` and `PaymentStatus`, but no payment transactions, amount paid, payment method, or balance.
-- Service request status and assigned technician are current-state fields, not audit histories.
+- Payment recording is status-based: `INVOICE` has `AmountDue`, `PaymentStatus`, and `DateIssued`, but there is no `PAYMENT` table for transaction amounts, payment dates, methods, or references. The system cannot calculate amounts paid or outstanding; `Partially Paid` is only a status. Proper transaction-level tracking would require a separate `PAYMENT` table and workflow, which are not part of the current implementation.
+- Service request status and assigned technician are current-state fields, not audit histories. The system cannot reconstruct status transitions, assignment/reassignment history, who performed an action, or when an individual change occurred.
 - `WARRANTY` permits multiple warranty rows per product; no database uniqueness constraint or date-order check is defined.
 - `SERVICE_RECORD`, `INVOICE`, and `FEEDBACK` each permit at most one row per request due to their unique `RequestID` constraints.
 - A user-to-technician profile link is optional in the database even though the application requires it when creating technician accounts.

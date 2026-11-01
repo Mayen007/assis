@@ -21,10 +21,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 
     $targetUserId = (int)($_POST['user_id'] ?? 0);
-    $newPassword = $_POST['new_password'] ?? '';
+    $newPassword = is_string($_POST['new_password'] ?? null) ? $_POST['new_password'] : '';
 
-    if (strlen($newPassword) < 6) {
-        set_flash('danger', 'Password must be at least 6 characters in length.');
+    if (($passwordError = password_policy_error($newPassword)) !== null) {
+        set_flash('danger', $passwordError);
         header('Location: ' . base_url('users/index.php'));
         exit;
     }
@@ -252,7 +252,8 @@ require_once __DIR__ . '/../includes/header.php';
                                                     <p class="small text-muted mb-3">Set a new password for staff member <strong><?= e($u['FullName']) ?></strong>.</p>
                                                     <div class="mb-3">
                                                         <label class="form-label" for="new_password_<?= $u['UserID'] ?>">New Password</label>
-                                                        <input type="password" name="new_password" id="new_password_<?= $u['UserID'] ?>" class="form-control" required minlength="6" placeholder="Minimum 6 characters">
+                                                        <input type="password" name="new_password" id="new_password_<?= $u['UserID'] ?>" class="form-control" required minlength="12" maxlength="72" placeholder="Minimum 12 characters">
+                                                        <div class="form-text">Use 12 or more characters; maximum 72 bytes.</div>
                                                     </div>
                                                 </div>
                                                 <div class="modal-footer">

@@ -29,7 +29,15 @@ CREATE TABLE IF NOT EXISTS `USERS` (
     CONSTRAINT `fk_user_technician` FOREIGN KEY (`RelatedTechnicianID`) REFERENCES `TECHNICIAN` (`TechnicianID`) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- 3. CUSTOMER Table (Table 5.2)
+-- LOGIN_ATTEMPTS (Persistent login throttling buckets)
+CREATE TABLE IF NOT EXISTS `LOGIN_ATTEMPTS` (
+    `AttemptKey` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
+    `FailedAttempts` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    `WindowStartedAt` DATETIME NOT NULL,
+    `LockedUntil` DATETIME NULL
+) ENGINE=InnoDB;
+
+-- CUSTOMER Table (Table 5.2)
 CREATE TABLE IF NOT EXISTS `CUSTOMER` (
     `CustomerID` INT AUTO_INCREMENT PRIMARY KEY,
     `FullName` VARCHAR(100) NOT NULL,

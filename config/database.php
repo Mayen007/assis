@@ -5,6 +5,21 @@
  */
 
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+    ini_set('session.use_trans_sid', '0');
+
+    $httpsEnabled = !empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off';
+    $httpsEnabled = $httpsEnabled || (int)($_SERVER['SERVER_PORT'] ?? 0) === 443;
+    $productionEnvironment = strtolower((string)getenv('APP_ENV')) === 'production';
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'secure' => $httpsEnabled || $productionEnvironment,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+
     session_start();
 }
 
