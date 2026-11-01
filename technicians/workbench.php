@@ -29,6 +29,28 @@ if ($requestId > 0) {
     ');
     $stmt->execute([':id' => $requestId]);
     $selectedRequest = $stmt->fetch();
+
+    if (!$selectedRequest) {
+        set_flash('warning', 'Requested service ticket was not found.');
+        header('Location: ' . base_url('technicians/workbench.php'));
+        exit;
+    }
+
+    // Access Control: Technicians can only access requests assigned to them
+    if ($currentUser['role'] === 'Technician') {
+        if (empty($currentUser['technician_id']) || (int)$selectedRequest['TechnicianID'] !== (int)$currentUser['technician_id']) {
+            set_flash('danger', 'Access denied. You are only authorized to access service requests assigned to you.');
+            header('Location: ' . base_url('technicians/workbench.php'));
+            exit;
+        }
+    }
+
+    // Check if request is already finalized
+    if (in_array($selectedRequest['Status'], ['Completed', 'Closed'], true)) {
+        set_flash('info', 'This service request is already marked as ' . e($selectedRequest['Status']) . '.');
+        header('Location: ' . base_url('requests/view.php?id=' . $selectedRequest['RequestID']));
+        exit;
+    }
 }
 
 // Fetch available spare parts catalog for selection
@@ -49,6 +71,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_repair'])) {
         } else {
             try {
                 $db->beginTransaction();
+
+                // Access Control & Verification on submission
+                $checkStmt = $db->prepare('SELECT TechnicianID, Status FROM SERVICE_REQUEST WHERE RequestID = :rid FOR UPDATE');
+                $checkStmt->execute([':rid' => $reqId]);
+                $reqRow = $checkStmt->fetch();
+
+                if (!$reqRow) {
+                    throw new Exception('Service request not found.');
+                }
+
+                if ($currentUser['role'] === 'Technician') {
+                    if (empty($currentUser['technician_id']) || (int)$reqRow['TechnicianID'] !== (int)$currentUser['technician_id']) {
+                        throw new Exception('Access denied. You are only authorized to complete service requests assigned to you.');
+                    }
+                }
+
+                if (in_array($reqRow['Status'], ['Completed', 'Closed'], true)) {
+                    throw new Exception('This service request has already been finalized.');
+                }
 
                 // 1. Insert SERVICE_RECORD
                 $stmt = $db->prepare('
@@ -125,6 +166,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_repair'])) {
                 $stmt = $db->prepare('UPDATE SERVICE_REQUEST SET Status = \'Completed\' WHERE RequestID = :rid');
                 $stmt->execute([':rid' => $reqId]);
 
+                if (!empty($reqRow['TechnicianID'])) {
+                    sync_technician_availability($db, (int)$reqRow['TechnicianID']);
+                }
+
                 $db->commit();
                 set_flash('success', 'Repair completed successfully. Invoice #INV generated for ' . format_money($totalAmountDue) . '.');
                 header('Location: ' . base_url('requests/view.php?id=' . $reqId));
@@ -151,7 +196,7 @@ if (!$selectedRequest) {
     ';
     $params = [];
 
-    if ($currentUser['role'] === 'Technician' && !empty($currentUser['technician_id'])) {
+    if ($currentUser['role'] === 'Technician') {
         $sql .= ' AND sr.TechnicianID = :tid ';
         $params[':tid'] = $currentUser['technician_id'];
     }

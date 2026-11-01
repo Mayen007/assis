@@ -42,7 +42,7 @@ function get_db(): PDO {
     try {
         $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
     } catch (PDOException $e) {
-        // Error 1049: Unknown database. Automatically create assis_db and seed initial data.
+        // Error 1049: Unknown database. Automatically create assis_db and initialize schema.
         if ((int)$e->getCode() === 1049 || str_contains($e->getMessage(), '1049') || str_contains($e->getMessage(), 'Unknown database')) {
             try {
                 $serverDsn = sprintf('mysql:host=%s;port=%s;charset=utf8mb4', DB_HOST, DB_PORT);
@@ -74,10 +74,15 @@ function get_db(): PDO {
  */
 function execute_sql_file(PDO $pdo, string $filePath): void {
     $sql = file_get_contents($filePath);
-    $queries = preg_split('/;\s*[\r\n]+/', $sql);
+    if ($sql === false) {
+        throw new RuntimeException('Unable to read database schema file.');
+    }
+
+    $sql = preg_replace('/^[ \t]*--.*(?:\R|$)/m', '', $sql);
+    $queries = preg_split('/;\s*(?:\r?\n|$)/', $sql);
     foreach ($queries as $query) {
         $trimmed = trim($query);
-        if ($trimmed !== '' && !str_starts_with($trimmed, '--')) {
+        if ($trimmed !== '') {
             $pdo->exec($trimmed);
         }
     }
@@ -159,3 +164,6 @@ function verify_csrf(): bool {
     $token = $_POST['csrf_token'] ?? '';
     return !empty($token) && hash_equals($_SESSION['csrf_token'] ?? '', $token);
 }
+
+// Include Technician assignment rules & workload helper
+require_once __DIR__ . '/../includes/technicians.php';

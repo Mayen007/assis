@@ -65,7 +65,7 @@ As established in Section 1.3 of [sameera.md](./sameera.md), technical implement
   - Customer registry and direct linkage of customer products and warranty terms.
   - Service request logging, assignment, and status lifecycle tracking.
   - Spare parts inventory catalog with automatic deduction on job completion and low-stock reorder alerts.
-  - Invoice generation (Labour Cost + Consumed Parts) and internal payment status tracking (`Unpaid`, `Paid`, `Partially Paid`).
+  - Invoice generation (Labour Cost + Consumed Parts) and status-based payment tracking (`Unpaid`, `Paid`, `Partially Paid`).
   - Customer feedback logging (Rating 1–5 and qualitative comments).
   - Tabular management reports (service status, technician workload, inventory balances, feedback).
 - **Out-of-Scope (Strictly Excluded):**
@@ -111,7 +111,7 @@ graph TD
 
 ## 4. Database Specification & Schema DDL
 
-The database design implements the logical and physical schema defined in Section 5.2 of [sameera.md](./sameera.md). All 10 core entities are normalized to 3NF, utilizing InnoDB engine for foreign key constraints and ACID transactional integrity.
+The as-built schema is defined by [`database/schema.sql`](./database/schema.sql). Its implementation-derived ERD, full data dictionary, table descriptions, relationship cardinalities, and referential actions are documented in [`DATABASE_DOCUMENTATION.md`](./DATABASE_DOCUMENTATION.md). Use that document as the reference for the current database implementation. The ERD and DDL below are retained only as the original proposal design baseline; they are not the current as-built schema.
 
 ```mermaid
 erDiagram
@@ -127,7 +127,7 @@ erDiagram
     SPARE_PART ||--o{ PARTS_USED : supplied_as
 ```
 
-### 4.1 Physical Schema Definition (MySQL DDL)
+### 4.1 Proposal Design Baseline (Not the As-Built Schema)
 
 ```sql
 -- Database Creation
@@ -275,6 +275,8 @@ stateDiagram-v2
   - `In Progress` $\rightarrow$ `Completed`: Requires `SERVICE_RECORD` creation (recording `ActionsTaken` and `LabourCost`).
   - `Completed` $\rightarrow$ `Closed`: Triggered when associated `INVOICE` is marked `'Paid'` and optional `FEEDBACK` recorded.
 
+The system stores the request's current `Status` and `TechnicianID`, along with request and service-record dates. It does not keep a separate event log of status changes or technician assignments, so previous statuses, prior assignees, change timestamps, and the users who made those changes cannot be reconstructed. Customer service history refers to linked requests and their service records, not a full audit history.
+
 ### 5.2 Inventory Deduction & Atomic Transaction
 When a technician submits the repair record with spare parts used, the system executes an atomic transaction in MySQL:
 
@@ -298,6 +300,8 @@ $$\text{AmountDue} = \text{SERVICE\_RECORD.LabourCost} + \text{PartsTotal}$$
 
 The calculated `AmountDue` is committed to `INVOICE` with default `PaymentStatus = 'Unpaid'`.
 
+Payment tracking is status-based only. Staff can change an invoice's status to `Unpaid`, `Paid`, or `Partially Paid`, but the system does not record individual payment transactions, amounts received, dates, methods, or an outstanding balance. Consequently, `Partially Paid` is an informational status and does not represent a reconciled partial-payment record. Transaction-level payment recording is outside the current project scope.
+
 ### 5.4 Management Reporting Engine
 In accordance with Section 5.4, the reporting engine generates formatted, tabular data with export/print layouts:
 1. **Service Request Status Report:** Summarizes total tickets grouped by `Status` (`Total`, `Pending`, `In Progress`, `Completed`, `Closed`) within selectable date ranges.
@@ -317,7 +321,7 @@ In accordance with Section 5.3 and Figures 5.2–5.5 in [sameera.md](./sameera.m
 | **Customer Registration (Fig 5.3)** | Front Desk / Admin | FullName (text), PhoneNumber (regex, unique), Email, PhysicalAddress | Created Customer ID, Customer Profile |
 | **New Service Request (Fig 5.4)** | Front Desk / Admin | Customer Search, Product Dropdown, IssueDescription (textarea), Priority (select) | Ticket Number (RequestID), Printable Job Slip |
 | **Technician Workbench** | Technician | ActionsTaken (textarea), LabourCost (decimal), Spare Parts Multi-Select & Quantity | Service Record, Stock deduction receipt |
-| **Invoicing Screen** | Front Desk / Admin | Request ID selector, Payment Status toggle (`Unpaid`, `Paid`, `Partially Paid`) | Formatted Printable Service Invoice |
+| **Invoicing Screen** | Front Desk / Admin | Request ID selector, Payment Status toggle (`Unpaid`, `Paid`, `Partially Paid`); no payment amount or transaction entry | Formatted Printable Service Invoice |
 | **Customer Feedback Form** | Front Desk / Customer | Rating (1 to 5 star radio/select), Comments (textarea) | Feedback acknowledgement |
 | **Status Report Screen (Fig 5.5)** | Manager / Admin | Date range filter (`StartDate`, `EndDate`) | Tabular Report & Printable Summary Sheet |
 

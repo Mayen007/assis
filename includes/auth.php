@@ -40,6 +40,20 @@ function require_login(): void {
         header('Location: ' . base_url('auth/login.php'));
         exit;
     }
+
+    if (($_SESSION['role'] ?? '') === 'Technician' && empty($_SESSION['technician_id'])) {
+        unset(
+            $_SESSION['user_id'],
+            $_SESSION['username'],
+            $_SESSION['full_name'],
+            $_SESSION['role'],
+            $_SESSION['technician_id']
+        );
+        session_regenerate_id(true);
+        set_flash('danger', 'Your technician account is not linked to a technician profile. Contact an administrator.');
+        header('Location: ' . base_url('auth/login.php'));
+        exit;
+    }
 }
 
 /**

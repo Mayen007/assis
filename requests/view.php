@@ -19,25 +19,6 @@ if ($requestId <= 0) {
 $db = get_db();
 $currentUser = current_user();
 
-// Handle Technician Assignment submission (Supervisor / Admin)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['assign_technician'])) {
-    require_role(['Admin', 'FrontDesk']);
-    if (verify_csrf()) {
-        $techId = (int)$_POST['technician_id'];
-        if ($techId > 0) {
-            $update = $db->prepare('
-                UPDATE SERVICE_REQUEST
-                SET TechnicianID = :tid, Status = CASE WHEN Status = \'Pending\' THEN \'In Progress\' ELSE Status END
-                WHERE RequestID = :rid
-            ');
-            $update->execute([':tid' => $techId, ':rid' => $requestId]);
-            set_flash('success', 'Technician assigned successfully.');
-            header('Location: ' . base_url('requests/view.php?id=' . $requestId));
-            exit;
-        }
-    }
-}
-
 // Fetch complete Request details
 $stmt = $db->prepare('
     SELECT sr.*,
@@ -60,6 +41,47 @@ if (!$req) {
     set_flash('danger', 'Service request ticket not found.');
     header('Location: ' . base_url('requests/index.php'));
     exit;
+}
+
+if (
+    $currentUser['role'] === 'Technician'
+    && (int)$req['TechnicianID'] !== (int)$currentUser['technician_id']
+) {
+    set_flash('danger', 'Access denied. You are only authorized to view service requests assigned to you.');
+    header('Location: ' . base_url('requests/index.php'));
+    exit;
+}
+
+// Handle Technician Assignment submission (Supervisor / Admin)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['assign_technician'])) {
+    require_role(['Admin', 'FrontDesk']);
+    if (verify_csrf()) {
+        $techId = (int)$_POST['technician_id'];
+        if ($techId > 0) {
+            $assignmentError = validate_technician_assignment($db, $techId, (int)$req['ProductID'], $req['IssueDescription'], $requestId);
+
+            if ($assignmentError) {
+                set_flash('danger', $assignmentError);
+            } else {
+                $previousTechId = (int)$req['TechnicianID'];
+                $update = $db->prepare('
+                    UPDATE SERVICE_REQUEST
+                    SET TechnicianID = :tid, Status = CASE WHEN Status = \'Pending\' THEN \'In Progress\' ELSE Status END
+                    WHERE RequestID = :rid
+                ');
+                $update->execute([':tid' => $techId, ':rid' => $requestId]);
+
+                sync_technician_availability($db, $techId);
+                if ($previousTechId && $previousTechId !== $techId) {
+                    sync_technician_availability($db, $previousTechId);
+                }
+
+                set_flash('success', 'Technician assigned successfully.');
+            }
+            header('Location: ' . base_url('requests/view.php?id=' . $requestId));
+            exit;
+        }
+    }
 }
 
 // Fetch Service Record if exists
@@ -89,8 +111,16 @@ $stmt = $db->prepare('SELECT * FROM FEEDBACK WHERE RequestID = :rid LIMIT 1');
 $stmt->execute([':rid' => $requestId]);
 $feedback = $stmt->fetch();
 
-// Available technicians for assignment modal
-$availableTechnicians = $db->query('SELECT * FROM TECHNICIAN WHERE Availability != \'On Leave\' ORDER BY FullName ASC')->fetchAll();
+// Available technicians for assignment
+$availableTechnicians = $db->query("
+    SELECT t.TechnicianID, t.FullName, t.Specialization, t.Availability,
+           COUNT(CASE WHEN sr.Status IN ('Pending', 'In Progress') AND sr.RequestID != {$requestId} THEN 1 END) AS ActiveJobs
+    FROM TECHNICIAN t
+    LEFT JOIN SERVICE_REQUEST sr ON t.TechnicianID = sr.TechnicianID
+    WHERE t.Availability != 'On Leave'
+    GROUP BY t.TechnicianID
+    ORDER BY t.FullName ASC
+")->fetchAll();
 
 $isWarrantyActive = !empty($req['WarrantyEnd']) && (strtotime($req['WarrantyEnd']) >= time());
 
@@ -286,8 +316,20 @@ require_once __DIR__ . '/../includes/header.php';
                             <select class="form-select form-select-sm" name="technician_id" id="technician_id" required>
                                 <option value="">-- Choose Technician --</option>
                                 <?php foreach ($availableTechnicians as $at): ?>
-                                    <option value="<?= $at['TechnicianID'] ?>" <?= ($req['TechnicianID'] == $at['TechnicianID']) ? 'selected' : '' ?>>
-                                        <?= e($at['FullName']) ?> (<?= e($at['Specialization']) ?>)
+                                    <?php
+                                    $isCurrent = ((int)$req['TechnicianID'] === (int)$at['TechnicianID']);
+                                    $productTitle = $req['ProductName'] . ' ' . $req['Model'];
+                                    $isCompatible = is_technician_specialization_compatible($at['Specialization'], $productTitle, $req['IssueDescription']);
+                                    $isBusy = ($at['Availability'] === 'Busy' || (int)$at['ActiveJobs'] >= MAX_TECHNICIAN_ACTIVE_JOBS) && !$isCurrent;
+                                    $tag = '';
+                                    if ($isBusy) {
+                                        $tag = ' [Busy - ' . $at['ActiveJobs'] . ' jobs]';
+                                    } elseif ($isCompatible) {
+                                        $tag = ' ★ [Recommended Specialist]';
+                                    }
+                                    ?>
+                                    <option value="<?= $at['TechnicianID'] ?>" <?= $isCurrent ? 'selected' : '' ?> <?= $isBusy ? 'disabled' : '' ?>>
+                                        <?= e($at['FullName']) ?> (<?= e($at['Specialization']) ?>)<?= $tag ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -362,4 +404,3 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
-

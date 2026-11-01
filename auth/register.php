@@ -25,11 +25,19 @@ if ($userCount > 0) {
     exit;
 }
 
+$setupKey = getenv('INITIAL_ADMIN_SETUP_KEY');
+if ($setupKey === false || strlen($setupKey) < 32) {
+    http_response_code(503);
+    exit('Initial administrator setup requires an INITIAL_ADMIN_SETUP_KEY of at least 32 characters.');
+}
+
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf()) {
         $error = 'Invalid security token. Please refresh and try again.';
+    } elseif (!hash_equals($setupKey, (string)($_POST['setup_key'] ?? ''))) {
+        $error = 'Invalid setup key.';
     } else {
         $fullName = trim($_POST['full_name'] ?? '');
         $username = trim($_POST['username'] ?? '');
@@ -47,31 +55,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($password !== $confirmPassword) {
             $error = 'Passwords do not match.';
         } else {
+            $lockAcquired = false;
+            $adminUser = null;
+            $setupAlreadyCompleted = false;
+
             try {
-                $hash = password_hash($password, PASSWORD_BCRYPT);
-                $stmt = $db->prepare('INSERT INTO USERS (Username, PasswordHash, FullName, Role, RelatedTechnicianID, IsActive) VALUES (:username, :hash, :fullname, :role, NULL, 1)');
-                $stmt->execute([
-                    ':username' => $username,
-                    ':hash'     => $hash,
-                    ':fullname' => $fullName,
-                    ':role'     => 'Admin'
-                ]);
+                $lockStmt = $db->prepare('SELECT GET_LOCK(:lock_name, 10)');
+                $lockStmt->execute([':lock_name' => 'assis_initial_admin_setup']);
+                $lockAcquired = (int)$lockStmt->fetchColumn() === 1;
+                if (!$lockAcquired) {
+                    throw new RuntimeException('Administrator setup is busy. Please try again.');
+                }
 
-                $adminId = (int)$db->lastInsertId();
-                $adminUser = [
-                    'UserID'              => $adminId,
-                    'Username'            => $username,
-                    'FullName'            => $fullName,
-                    'Role'                => 'Admin',
-                    'RelatedTechnicianID' => null,
-                ];
+                $userCount = (int)$db->query('SELECT COUNT(*) FROM USERS')->fetchColumn();
+                if ($userCount > 0) {
+                    $setupAlreadyCompleted = true;
+                } else {
+                    $hash = password_hash($password, PASSWORD_BCRYPT);
+                    $stmt = $db->prepare('INSERT INTO USERS (Username, PasswordHash, FullName, Role, RelatedTechnicianID, IsActive) VALUES (:username, :hash, :fullname, :role, NULL, 1)');
+                    $stmt->execute([
+                        ':username' => $username,
+                        ':hash'     => $hash,
+                        ':fullname' => $fullName,
+                        ':role'     => 'Admin'
+                    ]);
 
+                    $adminUser = [
+                        'UserID'              => (int)$db->lastInsertId(),
+                        'Username'            => $username,
+                        'FullName'            => $fullName,
+                        'Role'                => 'Admin',
+                        'RelatedTechnicianID' => null,
+                    ];
+                }
+            } catch (Exception $e) {
+                $error = 'Account creation error: ' . $e->getMessage();
+            } finally {
+                if ($lockAcquired) {
+                    $db->query("SELECT RELEASE_LOCK('assis_initial_admin_setup')");
+                }
+            }
+
+            if ($setupAlreadyCompleted) {
+                set_flash('info', 'System already initialized. Additional staff accounts must be created by the Administrator.');
+                header('Location: ' . base_url('auth/login.php'));
+                exit;
+            }
+
+            if ($adminUser !== null) {
                 login_user($adminUser);
                 set_flash('success', 'Administrator account created successfully! Welcome to ' . APP_SHORT_NAME . '.');
                 header('Location: ' . base_url('dashboard.php'));
                 exit;
-            } catch (Exception $e) {
-                $error = 'Account creation error: ' . $e->getMessage();
             }
         }
     }
@@ -119,7 +154,7 @@ $pageTitle = 'Initial Administrator Setup';
     </div>
 
     <div class="alert alert-info py-2 small mb-4" role="alert">
-        <i class="bi bi-info-circle-fill me-1"></i> No users detected. Set up your administrator credentials to initialize the system.
+        <i class="bi bi-info-circle-fill me-1"></i> No users detected. Enter the administrator setup key to initialize the system.
     </div>
 
     <?php if ($error): ?>
@@ -130,6 +165,11 @@ $pageTitle = 'Initial Administrator Setup';
 
     <form method="POST" action="">
         <?= csrf_field() ?>
+
+        <div class="mb-3">
+            <label class="form-label" for="setup_key">Administrator Setup Key</label>
+            <input type="password" class="form-control" id="setup_key" name="setup_key" required autocomplete="off">
+        </div>
 
         <div class="mb-3">
             <label class="form-label" for="full_name">Full Name</label>
@@ -175,4 +215,3 @@ $pageTitle = 'Initial Administrator Setup';
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-

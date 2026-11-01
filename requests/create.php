@@ -1,4 +1,5 @@
 <?php
+
 /**
  * New Service Request Logging Interface
  * Reference: sameera.md (Chapter Five, Figure 5.4)
@@ -27,13 +28,17 @@ $products = $db->query('
     ORDER BY p.ProductName ASC
 ')->fetchAll();
 
-// Fetch available technicians
-$technicians = $db->query('
-    SELECT TechnicianID, FullName, Specialization, Availability
-    FROM TECHNICIAN
-    WHERE Availability != \'On Leave\'
-    ORDER BY FullName ASC
-')->fetchAll();
+// Fetch available technicians (Available status and under active capacity)
+$technicians = $db->query("
+    SELECT t.TechnicianID, t.FullName, t.Specialization, t.Availability,
+           COUNT(CASE WHEN sr.Status IN ('Pending', 'In Progress') THEN 1 END) AS ActiveJobs
+    FROM TECHNICIAN t
+    LEFT JOIN SERVICE_REQUEST sr ON t.TechnicianID = sr.TechnicianID
+    WHERE t.Availability = 'Available'
+    GROUP BY t.TechnicianID
+    HAVING ActiveJobs < " . MAX_TECHNICIAN_ACTIVE_JOBS . "
+    ORDER BY t.FullName ASC
+")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf()) {
@@ -48,29 +53,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($customerId <= 0 || $productId <= 0 || $issueDescription === '') {
             $error = 'Please select a Customer, select a Product, and provide the Problem Description.';
         } else {
-            try {
-                // If technician assigned, status can start as 'In Progress', else 'Pending'
-                $initialStatus = $technicianId ? 'In Progress' : 'Pending';
+            // Verify that the product exists and belongs to the selected customer
+            $prodCheck = $db->prepare('SELECT ProductID FROM PRODUCT WHERE ProductID = :pid AND CustomerID = :cid LIMIT 1');
+            $prodCheck->execute([':pid' => $productId, ':cid' => $customerId]);
+            $productRow = $prodCheck->fetch();
 
-                $stmt = $db->prepare('
-                    INSERT INTO SERVICE_REQUEST (CustomerID, ProductID, TechnicianID, DateLogged, IssueDescription, Priority, Status)
-                    VALUES (:cid, :pid, :tid, NOW(), :desc, :priority, :status)
-                ');
-                $stmt->execute([
-                    ':cid'      => $customerId,
-                    ':pid'      => $productId,
-                    ':tid'      => $technicianId,
-                    ':desc'     => $issueDescription,
-                    ':priority' => $priority,
-                    ':status'   => $initialStatus,
-                ]);
+            if (!$productRow) {
+                $error = 'The selected product does not exist or is not registered to the selected customer.';
+            } elseif ($technicianId && ($assignmentError = validate_technician_assignment($db, $technicianId, $productId, $issueDescription))) {
+                $error = $assignmentError;
+            } else {
+                try {
+                    // If technician assigned, status can start as 'In Progress', else 'Pending'
+                    $initialStatus = $technicianId ? 'In Progress' : 'Pending';
 
-                $requestId = $db->lastInsertId();
-                set_flash('success', 'Service Request #SR' . str_pad((string)$requestId, 4, '0', STR_PAD_LEFT) . ' logged successfully.');
-                header('Location: ' . base_url('requests/view.php?id=' . $requestId));
-                exit;
-            } catch (Exception $e) {
-                $error = 'Failed to create service request: ' . $e->getMessage();
+                    $stmt = $db->prepare('
+                        INSERT INTO SERVICE_REQUEST (CustomerID, ProductID, TechnicianID, DateLogged, IssueDescription, Priority, Status)
+                        VALUES (:cid, :pid, :tid, NOW(), :desc, :priority, :status)
+                    ');
+                    $stmt->execute([
+                        ':cid'      => $customerId,
+                        ':pid'      => $productId,
+                        ':tid'      => $technicianId,
+                        ':desc'     => $issueDescription,
+                        ':priority' => $priority,
+                        ':status'   => $initialStatus,
+                    ]);
+
+                    $requestId = $db->lastInsertId();
+
+                    if ($technicianId) {
+                        sync_technician_availability($db, $technicianId);
+                    }
+
+                    set_flash('success', 'Service Request #SR' . str_pad((string)$requestId, 4, '0', STR_PAD_LEFT) . ' logged successfully.');
+                    header('Location: ' . base_url('requests/view.php?id=' . $requestId));
+                    exit;
+                } catch (Exception $e) {
+                    $error = 'Failed to create service request: ' . $e->getMessage();
+                }
             }
         }
     }
@@ -82,7 +103,7 @@ require_once __DIR__ . '/../includes/header.php';
 
 <div class="row justify-content-center">
     <div class="col-12 col-lg-9">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mb-4">
             <div>
                 <h3 class="fw-bold mb-1">Log New Service Request</h3>
                 <p class="text-muted small mb-0">Record customer defect complaint, priority rating, and assign a specialist technician.</p>
@@ -171,7 +192,7 @@ require_once __DIR__ . '/../includes/header.php';
                                     <option value="">-- Leave Unassigned (Triage Later) --</option>
                                     <?php foreach ($technicians as $t): ?>
                                         <option value="<?= $t['TechnicianID'] ?>">
-                                            <?= e($t['FullName']) ?> (<?= e($t['Specialization']) ?>) - <?= e($t['Availability']) ?>
+                                            <?= e($t['FullName']) ?> (<?= e($t['Specialization']) ?>) &bull; <?= $t['ActiveJobs'] ?>/<?= MAX_TECHNICIAN_ACTIVE_JOBS ?> active
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
@@ -197,37 +218,36 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
-function filterProductsByCustomer(customerId) {
-    const productSelect = document.getElementById('product_id');
-    const options = productSelect.querySelectorAll('option');
+    function filterProductsByCustomer(customerId) {
+        const productSelect = document.getElementById('product_id');
+        const options = productSelect.querySelectorAll('option');
 
-    options.forEach(opt => {
-        if (!opt.value) return; // keep default placeholder
-        const optCustomer = opt.getAttribute('data-customer');
-        if (!customerId || optCustomer === customerId) {
-            opt.style.display = '';
-        } else {
-            opt.style.display = 'none';
+        options.forEach(opt => {
+            if (!opt.value) return; // keep default placeholder
+            const optCustomer = opt.getAttribute('data-customer');
+            if (!customerId || optCustomer === customerId) {
+                opt.style.display = '';
+            } else {
+                opt.style.display = 'none';
+            }
+        });
+
+        if (customerId) {
+            // Find if selected product belongs to this customer, otherwise reset
+            const currentSelected = productSelect.selectedOptions[0];
+            if (currentSelected && currentSelected.getAttribute('data-customer') !== customerId) {
+                productSelect.value = '';
+            }
+        }
+    }
+
+    // Initial filter run if customer preselected
+    document.addEventListener('DOMContentLoaded', function() {
+        const custSelect = document.getElementById('customer_id');
+        if (custSelect.value) {
+            filterProductsByCustomer(custSelect.value);
         }
     });
-
-    if (customerId) {
-        // Find if selected product belongs to this customer, otherwise reset
-        const currentSelected = productSelect.selectedOptions[0];
-        if (currentSelected && currentSelected.getAttribute('data-customer') !== customerId) {
-            productSelect.value = '';
-        }
-    }
-}
-
-// Initial filter run if customer preselected
-document.addEventListener('DOMContentLoaded', function() {
-    const custSelect = document.getElementById('customer_id');
-    if (custSelect.value) {
-        filterProductsByCustomer(custSelect.value);
-    }
-});
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
-

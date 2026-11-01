@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS `PRODUCT` (
     `Model` VARCHAR(100) NOT NULL,
     `SerialNumber` VARCHAR(100) NOT NULL UNIQUE,
     `PurchaseDate` DATE NULL,
+    UNIQUE KEY `uk_product_customer` (`ProductID`, `CustomerID`),
     CONSTRAINT `fk_product_customer` FOREIGN KEY (`CustomerID`) REFERENCES `CUSTOMER` (`CustomerID`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
@@ -72,6 +73,7 @@ CREATE TABLE IF NOT EXISTS `SERVICE_REQUEST` (
     `Status` ENUM('Pending', 'In Progress', 'Completed', 'Closed') NOT NULL DEFAULT 'Pending',
     CONSTRAINT `fk_request_customer` FOREIGN KEY (`CustomerID`) REFERENCES `CUSTOMER` (`CustomerID`),
     CONSTRAINT `fk_request_product` FOREIGN KEY (`ProductID`) REFERENCES `PRODUCT` (`ProductID`),
+    CONSTRAINT `fk_request_product_customer` FOREIGN KEY (`ProductID`, `CustomerID`) REFERENCES `PRODUCT` (`ProductID`, `CustomerID`) ON UPDATE CASCADE,
     CONSTRAINT `fk_request_technician` FOREIGN KEY (`TechnicianID`) REFERENCES `TECHNICIAN` (`TechnicianID`) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 

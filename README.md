@@ -14,8 +14,8 @@ after-sales-system/
 ├── config/
 │   └── database.php           # PDO connection, base URL helper, session & CSRF security
 ├── database/
-│   ├── schema.sql             # Complete 3NF DDL schema for all 10 core tables + USERS
-│   └── seed.sql               # Realistic initial demonstration fixtures & test accounts
+│   └── schema.sql             # Complete 3NF DDL schema for all 10 core tables + USERS
+├── DATABASE_DOCUMENTATION.md  # As-built ERD, data dictionary, table and relationship reference
 ├── includes/
 │   ├── auth.php               # Role-Based Access Control (RBAC) & session guards
 │   ├── header.php             # Responsive Bootstrap 5 header & dynamic RBAC navbar
@@ -74,28 +74,31 @@ C:\xampp\htdocs\after-sales-system
 ### Step 2: Database Initialization
 1. Start **Apache** and **MySQL** in your XAMPP Control Panel.
 2. Open **phpMyAdmin** in your browser (`http://localhost/phpmyadmin`).
-3. Click on **Import** and select:
-   - First import: [`database/schema.sql`](./database/schema.sql) (Creates `assis_db` and all 11 tables).
-   - Second import: [`database/seed.sql`](./database/seed.sql) (Populates test accounts and initial data).
+3. Click on **Import** and select [`database/schema.sql`](./database/schema.sql) (Creates `assis_db` and all relational tables).
 
-### Step 3: Access Application
-Navigate to the application in any web browser:
-```
-http://localhost/after-sales-system/
-```
+   *(Note: Alternatively, ASSIS automatically creates the database and executes `schema.sql` on first launch).*
+
+### Step 3: First-Run Administrator Registration
+1. Configure a random `INITIAL_ADMIN_SETUP_KEY` of at least 32 characters for PHP/Apache. For XAMPP, add `SetEnv INITIAL_ADMIN_SETUP_KEY "your-long-random-key"` to the Apache configuration and restart Apache. Do not commit the key.
+2. Navigate to the application in any web browser:
+   ```
+   http://localhost/after-sales-system/
+   ```
+3. The system detects a fresh installation (0 users) and presents the **Administrator Setup** screen (`/auth/register.php`).
+4. Enter the configured setup key, **Full Name**, **Username**, and **Password** to register the primary Administrator account. Setup is disabled if the key is not configured and closes after an account is created.
+5. Sign in to access the system. You can then register Front Desk and Technician staff via **Settings > Staff User Management** (`/users/index.php`).
 
 ---
 
-## 3. Pre-Seeded Demonstration Accounts
+## 3. User Roles & Access Control
 
-All pre-seeded demo accounts share the password: `password123`
+ASSIS strictly enforces Role-Based Access Control (RBAC) across three operational roles:
 
-| Role | Username | Password | Operational Access |
-|---|---|---|---|
-| **Service Manager (Admin)** | `admin` | `password123` | Full administrative control, technician management, inventory, reports, and all operational modules. |
-| **Front Desk / Reception** | `reception` | `password123` | Customer registration, equipment linking, logging service requests, invoice distribution, feedback capture. |
-| **Technician (Audio-Visual)** | `tech.david` | `password123` | View assigned work orders, open technician workbench, record actions taken, consume spare parts. |
-| **Technician (Cooling)** | `tech.sarah` | `password123` | View assigned work orders, record cooling and refrigeration repairs. |
+| Role | Operational Scope | Account Creation |
+|---|---|---|
+| **Service Manager (Admin)** | Full administrative control, technician management, inventory, management reports, and staff user management. | Created during initial system setup (`/auth/register.php`). |
+| **Front Desk / Reception** | Customer registration, equipment linking, service request logging, invoice distribution, feedback collection. | Registered by Administrator under **Settings > Staff Users**. |
+| **Technician** | Access assigned work orders on the Technician Workbench (`/technicians/workbench.php`), record actions taken, consume spare parts. | Registered by Administrator under **Settings > Staff Users** and linked to a Technician specialist record. |
 
 ---
 

@@ -48,44 +48,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'The username "' . e($username) . '" is already taken. Please choose another username.';
             } else {
                 $relatedTechId = null;
+                try {
+                    $db->beginTransaction();
 
-                if ($role === 'Technician') {
-                    if ($techOption === 'new') {
-                        // Create matching technician profile automatically
-                        $spec = $newTechSpec !== '' ? $newTechSpec : 'General Diagnostics & Repair';
-                        $tStmt = $db->prepare('
-                            INSERT INTO TECHNICIAN (FullName, Specialization, Phone, Availability)
-                            VALUES (:name, :spec, :phone, \'Available\')
-                        ');
-                        $tStmt->execute([
-                            ':name'  => $fullName,
-                            ':spec'  => $spec,
-                            ':phone' => $newTechPhone ?: null,
-                        ]);
-                        $relatedTechId = (int)$db->lastInsertId();
-                    } elseif ($existingTechId) {
-                        $relatedTechId = $existingTechId;
+                    if ($role === 'Technician') {
+                        if ($techOption === 'new') {
+                            $spec = $newTechSpec !== '' ? $newTechSpec : 'General Diagnostics & Repair';
+                            $tStmt = $db->prepare('
+                                INSERT INTO TECHNICIAN (FullName, Specialization, Phone, Availability)
+                                VALUES (:name, :spec, :phone, \'Available\')
+                            ');
+                            $tStmt->execute([
+                                ':name'  => $fullName,
+                                ':spec'  => $spec,
+                                ':phone' => $newTechPhone ?: null,
+                            ]);
+                            $relatedTechId = (int)$db->lastInsertId();
+                        } elseif ($techOption === 'existing' && $existingTechId) {
+                            $tStmt = $db->prepare('SELECT TechnicianID FROM TECHNICIAN WHERE TechnicianID = :id FOR UPDATE');
+                            $tStmt->execute([':id' => $existingTechId]);
+                            $relatedTechId = $tStmt->fetchColumn();
+
+                            if (!$relatedTechId) {
+                                throw new RuntimeException('Select a valid technician profile for this account.');
+                            }
+                        } else {
+                            throw new RuntimeException('A technician account must be linked to an existing or new technician profile.');
+                        }
                     }
+
+                    $passwordHash = password_hash($password, PASSWORD_BCRYPT);
+                    $insStmt = $db->prepare('
+                        INSERT INTO USERS (Username, PasswordHash, FullName, Role, RelatedTechnicianID, IsActive)
+                        VALUES (:username, :hash, :name, :role, :tech_id, :active)
+                    ');
+                    $insStmt->execute([
+                        ':username' => $username,
+                        ':hash'     => $passwordHash,
+                        ':name'     => $fullName,
+                        ':role'     => $role,
+                        ':tech_id'  => $relatedTechId,
+                        ':active'   => $isActive,
+                    ]);
+
+                    $db->commit();
+                    set_flash('success', 'Staff account for "' . e($fullName) . '" (@' . e($username) . ') created successfully.');
+                    header('Location: ' . base_url('users/index.php'));
+                    exit;
+                } catch (Exception $e) {
+                    if ($db->inTransaction()) {
+                        $db->rollBack();
+                    }
+                    $error = 'Account creation error: ' . $e->getMessage();
                 }
-
-                // Insert user account
-                $passwordHash = password_hash($password, PASSWORD_BCRYPT);
-                $insStmt = $db->prepare('
-                    INSERT INTO USERS (Username, PasswordHash, FullName, Role, RelatedTechnicianID, IsActive)
-                    VALUES (:username, :hash, :name, :role, :tech_id, :active)
-                ');
-                $insStmt->execute([
-                    ':username' => $username,
-                    ':hash'     => $passwordHash,
-                    ':name'     => $fullName,
-                    ':role'     => $role,
-                    ':tech_id'  => $relatedTechId,
-                    ':active'   => $isActive,
-                ]);
-
-                set_flash('success', 'Staff account for "' . e($fullName) . '" (@' . e($username) . ') created successfully.');
-                header('Location: ' . base_url('users/index.php'));
-                exit;
             }
         }
     }
