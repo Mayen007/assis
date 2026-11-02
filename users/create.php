@@ -207,13 +207,13 @@ require_once __DIR__ . '/../includes/header.php';
 
                     <div class="col-12 col-md-6">
                         <label class="form-label" for="password">Initial Password <span class="text-danger">*</span></label>
-                        <input type="password" name="password" id="password" class="form-control" placeholder="Minimum 12 characters" required minlength="12" maxlength="72">
-                        <div class="form-text">Use 12 or more characters; passwords are limited to 72 bytes.</div>
+                        <input type="password" name="password" id="password" class="form-control" placeholder="Minimum 8 characters" required minlength="8" maxlength="72">
+                        <div class="form-text">Use 8 or more characters; passwords are limited to 72 bytes.</div>
                     </div>
 
                     <div class="col-12 col-md-6">
                         <label class="form-label" for="confirm_password">Confirm Password <span class="text-danger">*</span></label>
-                        <input type="password" name="confirm_password" id="confirm_password" class="form-control" placeholder="Re-enter password" required minlength="12" maxlength="72">
+                        <input type="password" name="confirm_password" id="confirm_password" class="form-control" placeholder="Re-enter password" required minlength="8" maxlength="72">
                     </div>
 
                     <div class="col-12">

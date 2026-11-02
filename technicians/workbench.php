@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_repair'])) {
                 $db->beginTransaction();
 
                 // Access Control & Verification on submission
-                $checkStmt = $db->prepare('SELECT TechnicianID, Status FROM SERVICE_REQUEST WHERE RequestID = :rid FOR UPDATE');
+                $checkStmt = $db->prepare('SELECT TechnicianID, ProductID, Status FROM SERVICE_REQUEST WHERE RequestID = :rid FOR UPDATE');
                 $checkStmt->execute([':rid' => $reqId]);
                 $reqRow = $checkStmt->fetch();
 
@@ -155,27 +155,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_repair'])) {
                 }
 
                 // 3. Automated Invoicing: AmountDue = LabourCost + TotalPartsCost
-                $totalAmountDue = $labourCost + $totalPartsCost;
+                $warrantyCheck = $db->prepare('
+                    SELECT 1
+                    FROM WARRANTY
+                    WHERE ProductID = :product_id
+                      AND StartDate <= CURDATE()
+                      AND EndDate >= CURDATE()
+                    LIMIT 1
+                ');
+                $warrantyCheck->execute([':product_id' => $reqRow['ProductID']]);
+                $warrantyApplied = $warrantyCheck->fetchColumn() !== false;
+                $totalAmountDue = $warrantyApplied ? 0.0 : $labourCost + $totalPartsCost;
+                $paymentStatus = $warrantyApplied ? 'No Charge' : 'Unpaid';
 
                 $stmt = $db->prepare('
-                    INSERT INTO INVOICE (RequestID, AmountDue, PaymentStatus, DateIssued)
-                    VALUES (:rid, :amount, \'Unpaid\', NOW())
+                    INSERT INTO INVOICE (RequestID, AmountDue, WarrantyApplied, PaymentStatus, DateIssued)
+                    VALUES (:rid, :amount, :warranty_applied, :payment_status, NOW())
                 ');
                 $stmt->execute([
-                    ':rid'    => $reqId,
+                    ':rid' => $reqId,
                     ':amount' => $totalAmountDue,
+                    ':warranty_applied' => $warrantyApplied ? 1 : 0,
+                    ':payment_status' => $paymentStatus,
                 ]);
 
-                // 4. Update Request Status to 'Completed'
-                $stmt = $db->prepare('UPDATE SERVICE_REQUEST SET Status = \'Completed\' WHERE RequestID = :rid');
-                $stmt->execute([':rid' => $reqId]);
+                // A zero-balance warranty invoice is settled without payment.
+                $requestStatus = $warrantyApplied ? 'Closed' : 'Completed';
+                $stmt = $db->prepare('UPDATE SERVICE_REQUEST SET Status = :status WHERE RequestID = :rid');
+                $stmt->execute([':status' => $requestStatus, ':rid' => $reqId]);
 
                 if (!empty($reqRow['TechnicianID'])) {
                     sync_technician_availability($db, (int)$reqRow['TechnicianID']);
                 }
 
                 $db->commit();
-                set_flash('success', 'Repair completed successfully. Invoice #INV generated for ' . format_money($totalAmountDue) . '.');
+                $invoiceMessage = $warrantyApplied
+                    ? 'Warranty coverage applied. Invoice #INV generated with no charge.'
+                    : 'Invoice #INV generated for ' . format_money($totalAmountDue) . '.';
+                set_flash('success', 'Repair completed successfully. ' . $invoiceMessage);
                 header('Location: ' . base_url('requests/view.php?id=' . $reqId));
                 exit;
             } catch (Exception $e) {

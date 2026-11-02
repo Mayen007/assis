@@ -254,8 +254,8 @@ require_once __DIR__ . '/../includes/header.php';
                                                     <p class="small text-muted mb-3">Set a new password for staff member <strong><?= e($u['FullName']) ?></strong>.</p>
                                                     <div class="mb-3">
                                                         <label class="form-label" for="new_password_<?= $u['UserID'] ?>">New Password</label>
-                                                        <input type="password" name="new_password" id="new_password_<?= $u['UserID'] ?>" class="form-control" required minlength="12" maxlength="72" placeholder="Minimum 12 characters">
-                                                        <div class="form-text">Use 12 or more characters; maximum 72 bytes.</div>
+                                                        <input type="password" name="new_password" id="new_password_<?= $u['UserID'] ?>" class="form-control" required minlength="8" maxlength="72" placeholder="Minimum 8 characters">
+                                                        <div class="form-text">Use 8 or more characters; maximum 72 bytes.</div>
                                                     </div>
                                                 </div>
                                                 <div class="modal-footer">

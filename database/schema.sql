@@ -121,7 +121,8 @@ CREATE TABLE IF NOT EXISTS `INVOICE` (
     `InvoiceID` INT AUTO_INCREMENT PRIMARY KEY,
     `RequestID` INT NOT NULL UNIQUE,
     `AmountDue` DECIMAL(10,2) NOT NULL,
-    `PaymentStatus` ENUM('Unpaid', 'Paid', 'Partially Paid') NOT NULL DEFAULT 'Unpaid',
+    `WarrantyApplied` TINYINT(1) NOT NULL DEFAULT 0,
+    `PaymentStatus` ENUM('Unpaid', 'Paid', 'Partially Paid', 'No Charge') NOT NULL DEFAULT 'Unpaid',
     `DateIssued` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT `fk_invoice_request` FOREIGN KEY (`RequestID`) REFERENCES `SERVICE_REQUEST` (`RequestID`) ON DELETE CASCADE
 ) ENGINE=InnoDB;

@@ -237,7 +237,8 @@ CREATE TABLE `INVOICE` (
     `InvoiceID` INT AUTO_INCREMENT PRIMARY KEY,
     `RequestID` INT NOT NULL UNIQUE,
     `AmountDue` DECIMAL(10,2) NOT NULL,
-    `PaymentStatus` ENUM('Unpaid', 'Paid', 'Partially Paid') DEFAULT 'Unpaid',
+    `WarrantyApplied` TINYINT(1) NOT NULL DEFAULT 0,
+    `PaymentStatus` ENUM('Unpaid', 'Paid', 'Partially Paid', 'No Charge') NOT NULL DEFAULT 'Unpaid',
     `DateIssued` DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT `fk_invoice_request` FOREIGN KEY (`RequestID`) REFERENCES `SERVICE_REQUEST` (`RequestID`) ON DELETE CASCADE
 ) ENGINE=InnoDB;
@@ -266,14 +267,14 @@ stateDiagram-v2
     [*] --> Pending: Request Logged by Front Desk
     Pending --> In_Progress: Technician Assigned & Work Started
     In_Progress --> Completed: Repairs Finished & Parts Recorded
-    Completed --> Closed: Invoiced, Payment Processed & Feedback Logged
+    Completed --> Closed: Invoice paid or warranty-covered (No Charge)
     Closed --> [*]
 ```
 
 - **Transition Rules:**
   - `Pending` $\rightarrow$ `In Progress`: Requires valid `TechnicianID` assignment. Updates `TECHNICIAN.Availability` to `'Busy'` if workload threshold reached.
   - `In Progress` $\rightarrow$ `Completed`: Requires `SERVICE_RECORD` creation (recording `ActionsTaken` and `LabourCost`).
-  - `Completed` $\rightarrow$ `Closed`: Triggered when associated `INVOICE` is marked `'Paid'` and optional `FEEDBACK` recorded.
+  - `Completed` $\rightarrow$ `Closed`: Triggered when the associated invoice is marked `'Paid'` or is fully covered by warranty (`'No Charge'`). Feedback may be recorded after completion.
 
 The implementation stores only each request's current `Status` and `TechnicianID`, plus request and service-record dates. It does not store status-change or assignment/reassignment events, previous values, a user ID for each change, or a timestamp for each change. Therefore, prior statuses, prior assignees, who performed a change, and when it occurred cannot be reconstructed. “Customer service history” means the customer's linked requests and service records only; it is not a full audit trail or status history. The proposal's statement about timestamped records and user attributions is an intended benefit, not a capability currently implemented.
 
@@ -298,9 +299,9 @@ $$\text{PartsTotal} = \sum_{i=1}^{n} \left( \text{PARTS\_USED.QuantityUsed}_i \t
 
 $$\text{AmountDue} = \text{SERVICE\_RECORD.LabourCost} + \text{PartsTotal}$$
 
-The calculated `AmountDue` is committed to `INVOICE` with default `PaymentStatus = 'Unpaid'`.
+If the service completion date falls within the product's inclusive warranty start and end dates, the system sets `WarrantyApplied = 1`, waives labour and parts, and records `AmountDue = 0` with `PaymentStatus = 'No Charge'`. Otherwise, the calculated amount is committed with default `PaymentStatus = 'Unpaid'`. Warranty terms are stored as free text and are not interpreted; coverage is date-based only.
 
-Payment tracking is status-based only. Staff can change an invoice's status to `Unpaid`, `Paid`, or `Partially Paid`, but the system does not record individual payment transactions, amounts received, payment dates, methods, or transaction references. It therefore cannot calculate how much has been paid or remains due. `Partially Paid` is an informational status, not a reconciled partial-payment record. Transaction-level tracking would require a separate `PAYMENT` table and workflow; that is outside the current project scope.
+Payment tracking is status-based only. Staff can change a non-warranty invoice's status to `Unpaid`, `Paid`, or `Partially Paid`, but the system does not record individual payment transactions, amounts received, payment dates, methods, or transaction references. It therefore cannot calculate how much has been paid or remains due. `Partially Paid` is an informational status, not a reconciled partial-payment record. Transaction-level tracking would require a separate `PAYMENT` table and workflow; that is outside the current project scope. `No Charge` is reserved for invoices fully covered by a date-valid warranty.
 
 ### 5.4 Management Reporting Engine
 In accordance with Section 5.4, the reporting engine generates formatted, tabular data with export/print layouts:
@@ -332,7 +333,7 @@ In accordance with Section 5.3 and Figures 5.2–5.5 in [sameera.md](./sameera.m
 Directly satisfying Section 4.1.2 of the proposal:
 
 1. **Authentication & Session Security:**
-   - Password hashing using PHP `password_hash()` with `PASSWORD_BCRYPT`; new and reset passwords require at least 12 characters and no more than 72 bytes.
+   - Password hashing using PHP `password_hash()` with `PASSWORD_BCRYPT`; new and reset passwords require at least 8 characters and no more than 72 bytes.
    - Login attempts are limited to five failures per normalized username or client IP per 15-minute window.
    - Session IDs use strict mode and cookie-only transport. Session cookies use `HttpOnly` and `SameSite=Lax`, and are marked `Secure` over HTTPS or when `APP_ENV=production`.
    - Production deployment requires HTTPS; reverse-proxy deployments must configure `APP_ENV=production`.

@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_payment_status
     $db->beginTransaction();
     try {
         $stmt = $db->prepare('
-            SELECT i.RequestID, sr.Status AS RequestStatus
+            SELECT i.RequestID, i.WarrantyApplied, sr.Status AS RequestStatus
             FROM INVOICE i
             JOIN SERVICE_REQUEST sr ON sr.RequestID = i.RequestID
             WHERE i.InvoiceID = :id
@@ -49,6 +49,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_payment_status
             $db->rollBack();
             set_flash('danger', 'Invoice not found.');
             header('Location: ' . base_url('billing/index.php'));
+            exit;
+        }
+
+        if ((bool)$invoiceStatus['WarrantyApplied']) {
+            $db->rollBack();
+            set_flash('warning', 'This invoice is covered by warranty and has no amount due.');
+            header('Location: ' . base_url('billing/view.php?id=' . $invoiceId));
             exit;
         }
 
@@ -135,6 +142,7 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Payment Status Toggle Bar (Screen Only) -->
+<?php if (!(bool)$inv['WarrantyApplied']): ?>
 <div class="card card-assis mb-4 no-print">
     <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
         <div class="d-flex align-items-center gap-2">
@@ -155,6 +163,7 @@ require_once __DIR__ . '/../includes/header.php';
         </form>
     </div>
 </div>
+<?php endif; ?>
 
 <!-- Printable Invoice Sheet -->
 <div class="card card-assis print-sheet p-4 p-md-5">
@@ -208,6 +217,14 @@ require_once __DIR__ . '/../includes/header.php';
         </div>
     <?php endif; ?>
 
+    <?php if ((bool)$inv['WarrantyApplied']): ?>
+        <div class="alert alert-success">
+            <i class="bi bi-shield-check me-1"></i>
+            <span class="badge badge-payment-nocharge me-1">No Charge</span>
+            Warranty coverage applied. Labour and parts are covered; no payment is due.
+        </div>
+    <?php endif; ?>
+
     <!-- Itemized Table of Charges -->
     <div class="table-responsive mb-4">
         <table class="table table-bordered align-middle">
@@ -227,15 +244,16 @@ require_once __DIR__ . '/../includes/header.php';
                         <div class="text-muted small">Standard inspection, disassembly, servicing, and testing</div>
                     </td>
                     <td class="text-center">1</td>
-                    <td class="text-end"><?= format_money($inv['LabourCost'] ?? 0) ?></td>
-                    <td class="text-end fw-semibold"><?= format_money($inv['LabourCost'] ?? 0) ?></td>
+                    <td class="text-end"><?= format_money($inv['WarrantyApplied'] ? 0 : ($inv['LabourCost'] ?? 0)) ?></td>
+                    <td class="text-end fw-semibold"><?= format_money($inv['WarrantyApplied'] ? 0 : ($inv['LabourCost'] ?? 0)) ?></td>
                 </tr>
 
                 <!-- Parts Rows -->
                 <?php
                 $partsTotal = 0;
                 foreach ($partsUsed as $p):
-                    $sub = $p['QuantityUsed'] * $p['UnitPrice'];
+                    $unitPrice = $inv['WarrantyApplied'] ? 0 : $p['UnitPrice'];
+                    $sub = $p['QuantityUsed'] * $unitPrice;
                     $partsTotal += $sub;
                 ?>
                     <tr>
@@ -244,7 +262,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <div class="text-muted small">Replacement hardware component</div>
                         </td>
                         <td class="text-center"><?= $p['QuantityUsed'] ?></td>
-                        <td class="text-end"><?= format_money($p['UnitPrice']) ?></td>
+                        <td class="text-end"><?= format_money($unitPrice) ?></td>
                         <td class="text-end fw-semibold"><?= format_money($sub) ?></td>
                     </tr>
                 <?php endforeach; ?>

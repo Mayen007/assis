@@ -11,6 +11,11 @@ require_role(['Admin', 'FrontDesk']);
 
 $db = get_db();
 $selectedCustomerId = (int)($_GET['customer_id'] ?? 0);
+$returnToRequest = !empty($_GET['return_to_request']) || !empty($_POST['return_to_request']);
+$returnRequestUrl = base_url('requests/create.php?' . http_build_query([
+    'customer_id' => $selectedCustomerId,
+    'return_from_product' => 1,
+]));
 $error = null;
 
 // Fetch all customers for dropdown
@@ -71,6 +76,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     $db->commit();
+                    if ($returnToRequest) {
+                        set_flash('success', 'Product registered. Continue creating the service request.');
+                        $returnUrl = base_url('requests/create.php?' . http_build_query([
+                            'customer_id' => $customerId,
+                            'product_id' => $productId,
+                            'return_from_product' => 1,
+                        ]));
+                        header('Location: ' . $returnUrl);
+                        exit;
+                    }
+
                     set_flash('success', 'Product registered and linked to customer successfully.');
                     header('Location: ' . base_url('customers/view.php?id=' . $customerId));
                     exit;
@@ -97,9 +113,9 @@ require_once __DIR__ . '/../includes/header.php';
                 <p class="text-muted small mb-0">Associate product details and warranty coverage with an existing customer.</p>
             </div>
             <div>
-                <a href="<?= base_url('products/index.php') ?>" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 w-100 w-md-auto justify-content-center">
+                <a href="<?= e($returnToRequest ? $returnRequestUrl : base_url('products/index.php')) ?>" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2 w-100 w-md-auto justify-content-center">
                     <i class="bi bi-arrow-left"></i>
-                    <span class="d-none d-md-inline">Back to Equipment</span>
+                    <span class="d-none d-md-inline"><?= $returnToRequest ? 'Back to Service Request' : 'Back to Equipment' ?></span>
                     <span class="d-md-none">Back</span>
                 </a>
             </div>
@@ -118,6 +134,9 @@ require_once __DIR__ . '/../includes/header.php';
             <div class="card-body p-4">
                 <form method="POST" action="">
                     <?= csrf_field() ?>
+                    <?php if ($returnToRequest): ?>
+                        <input type="hidden" name="return_to_request" value="1">
+                    <?php endif; ?>
 
                     <div class="mb-3">
                         <label class="form-label" for="customer_id">Select Customer <span class="text-danger">*</span></label>
@@ -180,7 +199,7 @@ require_once __DIR__ . '/../includes/header.php';
                     </div>
 
                     <div class="d-flex justify-content-end gap-2 mt-4">
-                        <a href="<?= base_url('customers/index.php') ?>" class="btn btn-light border">Cancel</a>
+                        <a href="<?= e($returnToRequest ? $returnRequestUrl : base_url('customers/index.php')) ?>" class="btn btn-light border">Cancel</a>
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-check2-circle me-1"></i> Register Product
                         </button>
@@ -192,4 +211,3 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>
-

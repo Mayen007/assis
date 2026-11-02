@@ -18,10 +18,10 @@ $stmt = $db->query('
            COUNT(CASE WHEN sr.Status = \'Pending\' THEN 1 END) AS PendingJobs,
            COUNT(CASE WHEN sr.Status = \'In Progress\' THEN 1 END) AS InProgressJobs,
            COUNT(CASE WHEN sr.Status IN (\'Completed\', \'Closed\') THEN 1 END) AS CompletedJobs,
-           COALESCE(SUM(rec.LabourCost), 0) AS TotalLabourBilled
+           COALESCE(SUM(i.AmountDue), 0) AS TotalBilled
     FROM TECHNICIAN t
     LEFT JOIN SERVICE_REQUEST sr ON t.TechnicianID = sr.TechnicianID
-    LEFT JOIN SERVICE_RECORD rec ON sr.RequestID = rec.RequestID
+    LEFT JOIN INVOICE i ON sr.RequestID = i.RequestID
     GROUP BY t.TechnicianID
     ORDER BY TotalAssigned DESC, t.FullName ASC
 ');
@@ -34,7 +34,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="d-flex justify-content-between align-items-center mb-4 no-print">
     <div>
         <h3 class="fw-bold mb-1">Technician Workload & Performance Report</h3>
-        <p class="text-muted small mb-0">Analysis of technician assignment distribution, current queue, and repair throughput.</p>
+        <p class="text-muted small mb-0">Total billed uses invoice amounts; warranty-covered repairs count as KSh 0.</p>
     </div>
     <div class="d-flex gap-2">
         <button type="button" class="btn btn-primary btn-print-sheet">
@@ -63,7 +63,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <th class="text-center">Pending</th>
                     <th class="text-center">In Progress</th>
                     <th class="text-center">Completed</th>
-                    <th class="text-end">Labour Billed</th>
+                    <th class="text-end">Total Billed</th>
                     <th class="text-center">Current Status</th>
                 </tr>
             </thead>
@@ -74,11 +74,11 @@ require_once __DIR__ . '/../includes/header.php';
                     <?php
                     $grandTotal = 0;
                     $grandCompleted = 0;
-                    $grandLabour = 0.0;
+                    $grandBilled = 0.0;
                     foreach ($workloads as $w):
                         $grandTotal += $w['TotalAssigned'];
                         $grandCompleted += $w['CompletedJobs'];
-                        $grandLabour += (float)$w['TotalLabourBilled'];
+                        $grandBilled += (float)$w['TotalBilled'];
                     ?>
                         <tr>
                             <td class="fw-semibold"><?= e($w['FullName']) ?></td>
@@ -87,7 +87,7 @@ require_once __DIR__ . '/../includes/header.php';
                             <td class="text-center text-warning fw-semibold"><?= $w['PendingJobs'] ?></td>
                             <td class="text-center text-info fw-semibold"><?= $w['InProgressJobs'] ?></td>
                             <td class="text-center text-success fw-semibold"><?= $w['CompletedJobs'] ?></td>
-                            <td class="text-end fw-semibold"><?= format_money($w['TotalLabourBilled']) ?></td>
+                            <td class="text-end fw-semibold"><?= format_money($w['TotalBilled']) ?></td>
                             <td class="text-center">
                                 <span class="badge bg-light text-dark border"><?= e($w['Availability']) ?></span>
                             </td>
@@ -98,7 +98,7 @@ require_once __DIR__ . '/../includes/header.php';
                         <td class="text-center"><?= $grandTotal ?></td>
                         <td colspan="2"></td>
                         <td class="text-center text-success"><?= $grandCompleted ?></td>
-                        <td class="text-end text-primary"><?= format_money($grandLabour) ?></td>
+                        <td class="text-end text-primary"><?= format_money($grandBilled) ?></td>
                         <td></td>
                     </tr>
                 <?php endif; ?>

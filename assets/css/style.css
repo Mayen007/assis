@@ -176,6 +176,11 @@ body {
     color: #92400e;
 }
 
+.badge-payment-nocharge {
+    background-color: #dbeafe;
+    color: #1e40af;
+}
+
 /* Table Styling */
 .table-assis {
     margin-bottom: 0;

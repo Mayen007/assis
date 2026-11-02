@@ -41,19 +41,42 @@ function require_login(): void {
         exit;
     }
 
-    if (($_SESSION['role'] ?? '') === 'Technician' && empty($_SESSION['technician_id'])) {
-        unset(
-            $_SESSION['user_id'],
-            $_SESSION['username'],
-            $_SESSION['full_name'],
-            $_SESSION['role'],
-            $_SESSION['technician_id']
-        );
-        session_regenerate_id(true);
-        set_flash('danger', 'Your technician account is not linked to a technician profile. Contact an administrator.');
-        header('Location: ' . base_url('auth/login.php'));
-        exit;
+    $now = time();
+    if (isset($_SESSION['last_activity']) && $now - (int)$_SESSION['last_activity'] >= SESSION_IDLE_TIMEOUT) {
+        revoke_login_session('Your session expired due to inactivity. Please sign in again.');
     }
+
+    $db = get_db();
+    $stmt = $db->prepare('
+        SELECT Username, FullName, Role, RelatedTechnicianID, IsActive
+        FROM USERS
+        WHERE UserID = :user_id
+        LIMIT 1
+    ');
+    $stmt->execute([':user_id' => (int)$_SESSION['user_id']]);
+    $user = $stmt->fetch();
+
+    if (!$user || !(bool)$user['IsActive']) {
+        revoke_login_session('Your account is inactive or no longer available. Please contact an administrator.');
+    }
+
+    if ($user['Role'] === 'Technician' && empty($user['RelatedTechnicianID'])) {
+        revoke_login_session('Your technician account is not linked to a technician profile. Contact an administrator.', 'danger');
+    }
+
+    $_SESSION['username'] = $user['Username'];
+    $_SESSION['full_name'] = $user['FullName'];
+    $_SESSION['role'] = $user['Role'];
+    $_SESSION['technician_id'] = $user['RelatedTechnicianID'];
+    $_SESSION['last_activity'] = $now;
+}
+
+function revoke_login_session(string $message, string $type = 'warning'): void {
+    $_SESSION = [];
+    session_regenerate_id(true);
+    set_flash($type, $message);
+    header('Location: ' . base_url('auth/login.php'));
+    exit;
 }
 
 /**
@@ -98,14 +121,15 @@ function login_user(array $user): void {
     $_SESSION['full_name']     = $user['FullName'];
     $_SESSION['role']          = $user['Role'];
     $_SESSION['technician_id'] = $user['RelatedTechnicianID'] ?? null;
+    $_SESSION['last_activity'] = time();
 }
 
 /**
  * Returns a validation message for a password that violates the bcrypt policy.
  */
 function password_policy_error(string $password): ?string {
-    if (strlen($password) < 12) {
-        return 'Password must be at least 12 characters long.';
+    if (strlen($password) < 8) {
+        return 'Password must be at least 8 characters long.';
     }
 
     if (strlen($password) > 72) {

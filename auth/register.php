@@ -192,16 +192,16 @@ $pageTitle = 'Initial Administrator Setup';
             <label class="form-label" for="password">Password</label>
             <div class="input-group">
                 <span class="input-group-text bg-light"><i class="bi bi-lock"></i></span>
-                <input type="password" class="form-control" id="password" name="password" minlength="12" maxlength="72" placeholder="At least 12 characters" required>
+                <input type="password" class="form-control" id="password" name="password" minlength="8" maxlength="72" placeholder="At least 8 characters" required>
             </div>
-            <div class="form-text">Use 12 or more characters; passwords are limited to 72 bytes.</div>
+            <div class="form-text">Use 8 or more characters; passwords are limited to 72 bytes.</div>
         </div>
 
         <div class="mb-3">
             <label class="form-label" for="confirm_password">Confirm Password</label>
             <div class="input-group">
                 <span class="input-group-text bg-light"><i class="bi bi-check2-circle"></i></span>
-                <input type="password" class="form-control" id="confirm_password" name="confirm_password" minlength="12" maxlength="72" placeholder="Repeat password" required>
+                <input type="password" class="form-control" id="confirm_password" name="confirm_password" minlength="8" maxlength="72" placeholder="Repeat password" required>
             </div>
         </div>
 

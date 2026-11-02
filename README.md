@@ -37,7 +37,7 @@ after-sales-system/
 │   └── create.php             # Product registration linked to customer & warranty terms
 ├── requests/
 │   ├── index.php              # Service request list with status & priority filters
-│   ├── create.php             # Service request logging form (Figure 5.4 in proposal)
+│   ├── create.php             # Request logging with in-flow equipment registration
 │   └── view.php               # Complete lifecycle ticket view & technician assignment
 ├── technicians/
 │   ├── index.php              # Technician specialist directory & workload counters
@@ -80,7 +80,9 @@ C:\xampp\htdocs\after-sales-system
 
    If the database already exists but its tables are missing, automatic initialization will not run. Import [`database/schema.sql`](./database/schema.sql) manually through phpMyAdmin to create the tables. The schema targets `assis_db`, so make sure this matches the database configured by `DB_NAME`.
 
-   For an existing database, also run [`database/migrations/001_create_login_attempts.sql`](./database/migrations/001_create_login_attempts.sql) in phpMyAdmin before using the login page.
+   For an existing database, also run [`database/migrations/001_create_login_attempts.sql`](./database/migrations/001_create_login_attempts.sql) and [`database/migrations/002_add_warranty_invoice_coverage.sql`](./database/migrations/002_add_warranty_invoice_coverage.sql) in phpMyAdmin.
+
+   Warranty coverage is applied automatically when a repair is completed between the registered warranty start and end dates, inclusive. Covered invoices show `No Charge` with a zero balance; warranty terms are stored for reference and are not interpreted by the system.
 
 ### Step 3: First-Run Administrator Registration
 1. Configure a random `INITIAL_ADMIN_SETUP_KEY` of at least 32 characters for PHP/Apache. For XAMPP, add `SetEnv INITIAL_ADMIN_SETUP_KEY "your-long-random-key"` to the Apache configuration and restart Apache. Do not commit the key.
@@ -97,8 +99,10 @@ C:\xampp\htdocs\after-sales-system
 - Serve the application only over HTTPS. In production, set `APP_ENV=production` in the PHP/Apache environment so session cookies are marked `Secure`, including when TLS terminates at a trusted reverse proxy.
 - If deployed behind a reverse proxy, configure the web server to populate `REMOTE_ADDR` with the verified client address; the application does not trust user-supplied forwarding headers.
 - Session cookies use `HttpOnly`, `SameSite=Lax`, strict session IDs, and cookie-only transport.
+- Authenticated sessions are revalidated against the user's active account on each protected request and expire after 30 minutes of inactivity.
+- Application-generated report times use the `Africa/Nairobi` timezone.
 - Login attempts are limited to five failures per username or client IP in a 15-minute window; locked buckets expire after 15 minutes. Ensure `LOGIN_ATTEMPTS` exists by importing the schema or applying the migration above.
-- New and reset passwords must be at least 12 characters and no more than 72 bytes (the current bcrypt input limit). Existing accounts are not forcibly reset.
+- New and reset passwords must be at least 8 characters and no more than 72 bytes (the current bcrypt input limit). Existing accounts are not forcibly reset.
 
 ---
 

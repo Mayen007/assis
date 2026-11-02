@@ -260,7 +260,8 @@ There is no unique constraint on (`RecordID`, `PartID`), so the database does no
 | `InvoiceID` | `INT` | No | PK, auto-increment | Invoice identifier. |
 | `RequestID` | `INT` | No | UNIQUE FK to `SERVICE_REQUEST.RequestID`, delete cascades | Request billed by this invoice; at most one invoice per request. |
 | `AmountDue` | `DECIMAL(10,2)` | No | — | Total amount due. |
-| `PaymentStatus` | `ENUM('Unpaid', 'Paid', 'Partially Paid')` | No | `Unpaid` | Payment status only; no transactions or paid amount are stored. |
+| `WarrantyApplied` | `TINYINT(1)` | No | `0` | Whether date-based warranty coverage waived labour and parts for this invoice. |
+| `PaymentStatus` | `ENUM('Unpaid', 'Paid', 'Partially Paid', 'No Charge')` | No | `Unpaid` | Settlement status; `No Charge` means warranty waived the amount due. No transactions or paid amount are stored. |
 | `DateIssued` | `DATETIME` | No | `CURRENT_TIMESTAMP` | Invoice issue timestamp. |
 
 ### `FEEDBACK`
@@ -300,6 +301,7 @@ There is no unique constraint on (`RecordID`, `PartID`), so the database does no
 ## Design and operational limits reflected by the schema
 
 - Payment recording is status-based: `INVOICE` has `AmountDue`, `PaymentStatus`, and `DateIssued`, but there is no `PAYMENT` table for transaction amounts, payment dates, methods, or references. The system cannot calculate amounts paid or outstanding; `Partially Paid` is only a status. Proper transaction-level tracking would require a separate `PAYMENT` table and workflow, which are not part of the current implementation.
+- Warranty coverage is applied when the service completion date falls within a product warranty's inclusive `StartDate` and `EndDate`. Covered repairs retain actual labour and parts usage records but receive a zero-balance invoice with `WarrantyApplied = 1` and `PaymentStatus = 'No Charge'`. Warranty `Terms` are free text and are not interpreted; eligibility is date-based only. Existing invoices default to `WarrantyApplied = 0`.
 - Service request status and assigned technician are current-state fields, not audit histories. The system cannot reconstruct status transitions, assignment/reassignment history, who performed an action, or when an individual change occurred.
 - `WARRANTY` permits multiple warranty rows per product; no database uniqueness constraint or date-order check is defined.
 - `SERVICE_RECORD`, `INVOICE`, and `FEEDBACK` each permit at most one row per request due to their unique `RequestID` constraints.

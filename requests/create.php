@@ -15,6 +15,12 @@ $error = null;
 
 $selectedCustomerId = (int)($_GET['customer_id'] ?? 0);
 $selectedProductId = (int)($_GET['product_id'] ?? 0);
+$returnFromProduct = !empty($_GET['return_from_product']);
+$registerProductQuery = ['return_to_request' => 1];
+if ($selectedCustomerId > 0) {
+    $registerProductQuery['customer_id'] = $selectedCustomerId;
+}
+$registerProductUrl = base_url('products/create.php?' . http_build_query($registerProductQuery));
 
 // Fetch customers
 $customers = $db->query('SELECT CustomerID, FullName, PhoneNumber, Email FROM CUSTOMER ORDER BY FullName ASC')->fetchAll();
@@ -174,7 +180,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <div class="mb-4">
                         <h6 class="fw-bold text-primary border-bottom pb-2">2. Product / Equipment Information</h6>
                         <div class="row g-3">
-                            <div class="col-12">
+                            <div class="col-12 col-md-9">
                                 <label class="form-label" for="product_id">Select Product <span class="text-danger">*</span></label>
                                 <select class="form-select" id="product_id" name="product_id" required>
                                     <option value="">-- Choose Equipment --</option>
@@ -184,7 +190,20 @@ require_once __DIR__ . '/../includes/header.php';
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
-                                <div class="form-text">Choose the specific item requiring repair. If not listed, register it under Products first.</div>
+                            </div>
+                            <div class="col-12 col-md-3 d-flex align-items-end">
+                                <a
+                                    href="<?= e($registerProductUrl) ?>"
+                                    id="register-product-link"
+                                    data-create-url="<?= e(base_url('products/create.php')) ?>"
+                                    class="btn btn-outline-primary w-100"
+                                >
+                                    <i class="bi bi-plus-circle me-1" aria-hidden="true"></i> Register equipment
+                                </a>
+                            </div>
+                            <div class="col-12">
+                                <div class="form-text">Choose the specific item requiring repair.</div>
+                                <div class="form-text" id="register-product-help">Register equipment for the selected customer, or choose one during registration.</div>
                             </div>
                         </div>
                     </div>
@@ -234,8 +253,12 @@ require_once __DIR__ . '/../includes/header.php';
 </div>
 
 <script>
+    const customerSelect = document.getElementById('customer_id');
+    const productSelect = document.getElementById('product_id');
+    const registerProductLink = document.getElementById('register-product-link');
+    const registerProductHelp = document.getElementById('register-product-help');
+
     function filterProductsByCustomer(customerId) {
-        const productSelect = document.getElementById('product_id');
         const options = productSelect.querySelectorAll('option');
 
         options.forEach(opt => {
@@ -257,12 +280,37 @@ require_once __DIR__ . '/../includes/header.php';
         }
     }
 
-    // Initial filter run if customer preselected
-    document.addEventListener('DOMContentLoaded', function() {
-        const custSelect = document.getElementById('customer_id');
-        if (custSelect.value) {
-            filterProductsByCustomer(custSelect.value);
+    function updateRegisterProductLink() {
+        const customerId = customerSelect.value;
+        const query = new URLSearchParams({return_to_request: '1'});
+        if (customerId) {
+            query.set('customer_id', customerId);
         }
+        registerProductLink.href = `${registerProductLink.dataset.createUrl}?${query}`;
+        registerProductHelp.textContent = 'Register equipment and return to this request.';
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (<?= $returnFromProduct ? 'true' : 'false' ?>) {
+            const draft = JSON.parse(sessionStorage.getItem('serviceRequestDraft') || 'null');
+            if (draft) {
+                document.getElementById('priority').value = draft.priority;
+                document.getElementById('technician_id').value = draft.technicianId;
+                document.getElementById('issue_description').value = draft.issueDescription;
+                sessionStorage.removeItem('serviceRequestDraft');
+            }
+        }
+
+        filterProductsByCustomer(customerSelect.value);
+        updateRegisterProductLink();
+        customerSelect.addEventListener('change', updateRegisterProductLink);
+        registerProductLink.addEventListener('click', function(event) {
+            sessionStorage.setItem('serviceRequestDraft', JSON.stringify({
+                priority: document.getElementById('priority').value,
+                technicianId: document.getElementById('technician_id').value,
+                issueDescription: document.getElementById('issue_description').value,
+            }));
+        });
     });
 </script>
 

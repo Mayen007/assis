@@ -4,6 +4,8 @@
  * After-Sales Service Information System (ASSIS)
  */
 
+date_default_timezone_set('Africa/Nairobi');
+
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
@@ -35,6 +37,7 @@ define('APP_NAME', 'After-Sales Service Information System');
 define('APP_SHORT_NAME', 'ASSIS');
 define('APP_VERSION', '1.0.0');
 define('CURRENCY', 'KES');
+define('SESSION_IDLE_TIMEOUT', 1800);
 
 /**
  * Returns a shared PDO database connection.

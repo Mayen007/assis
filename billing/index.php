@@ -67,6 +67,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <option value="Unpaid" <?= $paymentStatus === 'Unpaid' ? 'selected' : '' ?>>Unpaid</option>
                     <option value="Paid" <?= $paymentStatus === 'Paid' ? 'selected' : '' ?>>Paid</option>
                     <option value="Partially Paid" <?= $paymentStatus === 'Partially Paid' ? 'selected' : '' ?>>Partially Paid</option>
+                    <option value="No Charge" <?= $paymentStatus === 'No Charge' ? 'selected' : '' ?>>No Charge</option>
                 </select>
             </div>
             <div class="col-6 col-md-2 d-flex gap-2">
