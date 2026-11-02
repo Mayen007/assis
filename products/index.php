@@ -118,6 +118,9 @@ require_once __DIR__ . '/../includes/header.php';
                                 <?php endif; ?>
                             </td>
                             <td class="text-end">
+                                <a href="<?= base_url('products/edit.php?id=' . $p['ProductID']) ?>" class="btn btn-sm btn-outline-secondary" title="Edit Product">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </a>
                                 <a href="<?= base_url('requests/create.php?customer_id=' . $p['CustomerID'] . '&product_id=' . $p['ProductID']) ?>" class="btn btn-sm btn-outline-primary" title="Log Service Request">
                                     <i class="bi bi-wrench"></i> Log Repair
                                 </a>

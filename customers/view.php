@@ -97,6 +97,9 @@ require_once __DIR__ . '/../includes/header.php';
                     <span><?= e($customer['PhysicalAddress'] ?: 'Not Provided') ?></span>
                 </div>
                 <hr>
+                <a href="<?= base_url('customers/edit.php?id=' . $customer['CustomerID']) ?>" class="btn btn-outline-secondary w-100 mb-2">
+                    <i class="bi bi-pencil me-1"></i> Edit Customer
+                </a>
                 <a href="<?= base_url('requests/create.php?customer_id=' . $customer['CustomerID']) ?>" class="btn btn-outline-primary w-100">
                     <i class="bi bi-wrench me-1"></i> Log Service Request
                 </a>
@@ -120,12 +123,13 @@ require_once __DIR__ . '/../includes/header.php';
                             <th>Serial Number</th>
                             <th>Purchase Date</th>
                             <th>Warranty Status</th>
+                            <th class="text-end">Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($products)): ?>
                             <tr>
-                                <td colspan="5" class="text-center text-muted py-4">No equipment registered yet for this client.</td>
+                                <td colspan="6" class="text-center text-muted py-4">No equipment registered yet for this client.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($products as $p): ?>
@@ -146,6 +150,11 @@ require_once __DIR__ . '/../includes/header.php';
                                         <?php else: ?>
                                             <span class="badge bg-danger" title="Expired: <?= e($p['EndDate']) ?>">Expired</span>
                                         <?php endif; ?>
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="<?= base_url('products/edit.php?id=' . $p['ProductID']) ?>" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-pencil"></i> Edit
+                                        </a>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

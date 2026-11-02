@@ -12,15 +12,40 @@ require_role('Admin');
 $db = get_db();
 $currentUser = current_user();
 
-$stmt = $db->query('
-    SELECT sp.*,
-           COALESCE(SUM(pu.QuantityUsed), 0) AS TotalConsumedQuantity
-    FROM SPARE_PART sp
-    LEFT JOIN PARTS_USED pu ON sp.PartID = pu.PartID
-    GROUP BY sp.PartID
-    ORDER BY (sp.QuantityInStock <= sp.ReorderLevel) DESC, sp.PartName ASC
-');
-$inventory = $stmt->fetchAll();
+$startDateInput = $_GET['start_date'] ?? date('Y-m-01');
+$endDateInput = $_GET['end_date'] ?? date('Y-m-d');
+$startDate = is_string($startDateInput) ? trim($startDateInput) : '';
+$endDate = is_string($endDateInput) ? trim($endDateInput) : '';
+$startDateValue = DateTimeImmutable::createFromFormat('!Y-m-d', $startDate);
+$endDateValue = DateTimeImmutable::createFromFormat('!Y-m-d', $endDate);
+$dateRangeError = null;
+
+if (
+    !$startDateValue || $startDateValue->format('Y-m-d') !== $startDate ||
+    !$endDateValue || $endDateValue->format('Y-m-d') !== $endDate ||
+    $startDate > $endDate
+) {
+    $dateRangeError = 'Enter a valid date range with the start date on or before the end date.';
+    $inventory = [];
+} else {
+    $stmt = $db->prepare('
+        SELECT sp.*,
+               COALESCE(SUM(
+                   CASE
+                       WHEN rec.CompletionDate BETWEEN :start_date AND :end_date
+                       THEN pu.QuantityUsed
+                       ELSE 0
+                   END
+               ), 0) AS TotalConsumedQuantity
+        FROM SPARE_PART sp
+        LEFT JOIN PARTS_USED pu ON sp.PartID = pu.PartID
+        LEFT JOIN SERVICE_RECORD rec ON pu.RecordID = rec.RecordID
+        GROUP BY sp.PartID
+        ORDER BY (sp.QuantityInStock <= sp.ReorderLevel) DESC, sp.PartName ASC
+    ');
+    $stmt->execute([':start_date' => $startDate, ':end_date' => $endDate]);
+    $inventory = $stmt->fetchAll();
+}
 
 $pageTitle = 'Inventory Valuation & Stock Report';
 require_once __DIR__ . '/../includes/header.php';
@@ -29,7 +54,7 @@ require_once __DIR__ . '/../includes/header.php';
 <div class="d-flex justify-content-between align-items-center mb-4 no-print">
     <div>
         <h3 class="fw-bold mb-1">Spare Parts Inventory & Stock Report</h3>
-        <p class="text-muted small mb-0">Warehouse stock valuation, consumption metrics, and low-inventory reorder alerts.</p>
+        <p class="text-muted small mb-0">Filter parts consumed by repair completion date; stock balances and valuation show current inventory.</p>
     </div>
     <div class="d-flex gap-2">
         <button type="button" class="btn btn-primary btn-print-sheet">
@@ -41,11 +66,34 @@ require_once __DIR__ . '/../includes/header.php';
     </div>
 </div>
 
+<div class="card card-assis mb-4 no-print">
+    <div class="card-body">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="start_date">Consumption period start</label>
+                <input type="date" class="form-control" id="start_date" name="start_date" value="<?= e($startDate) ?>" required>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label" for="end_date">Consumption period end</label>
+                <input type="date" class="form-control" id="end_date" name="end_date" value="<?= e($endDate) ?>" required>
+            </div>
+            <div class="col-12 col-md-4">
+                <button type="submit" class="btn btn-secondary w-100">Apply date range</button>
+            </div>
+        </form>
+        <?php if ($dateRangeError): ?>
+            <div class="alert alert-danger mt-3 mb-0" role="alert"><?= e($dateRangeError) ?></div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <div class="card card-assis print-sheet p-4 p-md-5">
     <div class="text-center mb-4 border-bottom pb-3">
         <h4 class="fw-bold text-uppercase mb-1">AFTER-SALES SERVICE INFORMATION SYSTEM</h4>
         <h5 class="fw-bold text-primary mb-2">SPARE PARTS INVENTORY & REORDER REPORT</h5>
         <div class="text-muted small">Generated on <?= date('d F Y, H:i') ?> by <?= e($currentUser['full_name']) ?></div>
+        <div class="text-muted small">Consumption period <?= e($startDate) ?> to <?= e($endDate) ?></div>
+        <div class="text-muted small">Stock on hand and valuation reflect current inventory.</div>
     </div>
 
     <div class="table-responsive mb-4">
@@ -57,7 +105,7 @@ require_once __DIR__ . '/../includes/header.php';
                     <th class="text-end">Unit Price</th>
                     <th class="text-center">Stock on Hand</th>
                     <th class="text-center">Reorder Threshold</th>
-                    <th class="text-center">Total Consumed</th>
+                    <th class="text-center">Consumed in Period</th>
                     <th class="text-end">Stock Value</th>
                     <th class="text-center">Status</th>
                 </tr>

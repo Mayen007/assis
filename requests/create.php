@@ -13,8 +13,13 @@ require_role(['Admin', 'FrontDesk']);
 $db = get_db();
 $error = null;
 
-$selectedCustomerId = (int)($_GET['customer_id'] ?? 0);
-$selectedProductId = (int)($_GET['product_id'] ?? 0);
+$selectedCustomerInput = $_GET['customer_id'] ?? 0;
+$selectedProductInput = $_GET['product_id'] ?? 0;
+$selectedCustomerId = is_scalar($selectedCustomerInput) ? (int)$selectedCustomerInput : 0;
+$selectedProductId = is_scalar($selectedProductInput) ? (int)$selectedProductInput : 0;
+$selectedTechnicianId = 0;
+$priority = 'Medium';
+$issueDescription = '';
 $returnFromProduct = !empty($_GET['return_from_product']);
 $registerProductQuery = ['return_to_request' => 1];
 if ($selectedCustomerId > 0) {
@@ -47,17 +52,42 @@ $technicians = $db->query("
 ")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $customerInput = $_POST['customer_id'] ?? 0;
+    $productInput = $_POST['product_id'] ?? 0;
+    $technicianInput = $_POST['technician_id'] ?? '';
+    $priorityInput = $_POST['priority'] ?? '';
+    $issueInput = $_POST['issue_description'] ?? '';
+
+    $customerId = is_scalar($customerInput) && filter_var($customerInput, FILTER_VALIDATE_INT) !== false
+        ? (int)$customerInput
+        : 0;
+    $productId = is_scalar($productInput) && filter_var($productInput, FILTER_VALIDATE_INT) !== false
+        ? (int)$productInput
+        : 0;
+    $selectedCustomerId = $customerId;
+    $selectedProductId = $productId;
+    $priority = is_string($priorityInput) ? $priorityInput : '';
+    $issueDescription = is_string($issueInput) ? trim($issueInput) : '';
+
     if (!verify_csrf()) {
         $error = 'Invalid security token.';
+    } elseif (
+        !is_string($technicianInput) ||
+        ($technicianInput !== '' && (
+            filter_var($technicianInput, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false
+        ))
+    ) {
+        $error = 'Select a valid technician.';
     } else {
-        $customerId = (int)($_POST['customer_id'] ?? 0);
-        $productId = (int)($_POST['product_id'] ?? 0);
-        $technicianId = !empty($_POST['technician_id']) ? (int)$_POST['technician_id'] : null;
-        $priority = trim($_POST['priority'] ?? 'Medium');
-        $issueDescription = trim($_POST['issue_description'] ?? '');
+        $technicianId = $technicianInput !== '' ? (int)$technicianInput : null;
+        $selectedTechnicianId = $technicianId ?? 0;
 
         if ($customerId <= 0 || $productId <= 0 || $issueDescription === '') {
-            $error = 'Please select a Customer, select a Product, and provide the Problem Description.';
+            $error = 'Select a customer and product, and provide a problem description.';
+        } elseif (!in_array($priority, ['Low', 'Medium', 'High'], true)) {
+            $error = 'Choose a valid service priority.';
+        } elseif (strlen($issueDescription) > 65535) {
+            $error = 'Problem description must be 65,535 bytes or fewer.';
         } else {
             // Verify that the product exists and belongs to the selected customer
             $prodCheck = $db->prepare('SELECT ProductID FROM PRODUCT WHERE ProductID = :pid AND CustomerID = :cid LIMIT 1');
@@ -215,9 +245,9 @@ require_once __DIR__ . '/../includes/header.php';
                             <div class="col-12 col-md-6">
                                 <label class="form-label" for="priority">Service Priority <span class="text-danger">*</span></label>
                                 <select class="form-select" id="priority" name="priority" required>
-                                    <option value="Low">Low</option>
-                                    <option value="Medium" selected>Medium</option>
-                                    <option value="High">High (Urgent)</option>
+                                    <option value="Low" <?= $priority === 'Low' ? 'selected' : '' ?>>Low</option>
+                                    <option value="Medium" <?= $priority === 'Medium' ? 'selected' : '' ?>>Medium</option>
+                                    <option value="High" <?= $priority === 'High' ? 'selected' : '' ?>>High (Urgent)</option>
                                 </select>
                             </div>
 
@@ -226,7 +256,7 @@ require_once __DIR__ . '/../includes/header.php';
                                 <select class="form-select" id="technician_id" name="technician_id">
                                     <option value="">-- Leave Unassigned (Triage Later) --</option>
                                     <?php foreach ($technicians as $t): ?>
-                                        <option value="<?= $t['TechnicianID'] ?>">
+                                        <option value="<?= $t['TechnicianID'] ?>" <?= $selectedTechnicianId === (int)$t['TechnicianID'] ? 'selected' : '' ?>>
                                             <?= e($t['FullName']) ?> (<?= e($t['Specialization']) ?>) &bull; <?= $t['ActiveJobs'] ?>/<?= MAX_TECHNICIAN_ACTIVE_JOBS ?> active
                                         </option>
                                     <?php endforeach; ?>
@@ -235,7 +265,7 @@ require_once __DIR__ . '/../includes/header.php';
 
                             <div class="col-12">
                                 <label class="form-label" for="issue_description">Problem Description <span class="text-danger">*</span></label>
-                                <textarea class="form-control" id="issue_description" name="issue_description" rows="4" placeholder="Describe the fault symptoms, customer notes, or observed defects in detail..." required><?= e($_POST['issue_description'] ?? '') ?></textarea>
+                                <textarea class="form-control" id="issue_description" name="issue_description" rows="4" maxlength="65535" placeholder="Describe the fault symptoms, customer notes, or observed defects in detail..." required><?= e($issueDescription) ?></textarea>
                             </div>
                         </div>
                     </div>

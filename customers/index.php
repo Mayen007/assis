@@ -105,6 +105,9 @@ require_once __DIR__ . '/../includes/header.php';
                             </td>
                             <td class="small text-muted"><?= date('d M Y', strtotime($c['DateRegistered'])) ?></td>
                             <td class="text-end">
+                                <a href="<?= base_url('customers/edit.php?id=' . $c['CustomerID']) ?>" class="btn btn-sm btn-outline-secondary" title="Edit Customer">
+                                    <i class="bi bi-pencil"></i> Edit
+                                </a>
                                 <a href="<?= base_url('customers/view.php?id=' . $c['CustomerID']) ?>" class="btn btn-sm btn-outline-primary" title="View Profile">
                                     <i class="bi bi-eye"></i> View
                                 </a>
