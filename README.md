@@ -3,7 +3,7 @@
 **Candidate:** Najma Hassan (ADM: BIT/2024/48669)  
 **Institution:** Mount Kenya University – School of Computing and Informatics  
 **Architecture:** Three-Tier Architecture (Presentation: HTML5/Bootstrap 5; Application: PHP; Data: MySQL)  
-**Methodological Model:** Rapid Application Development (RAD) (Martin, 1991)  
+**Methodological Model:** Rapid Application Development (RAD) (Martin, 1991)
 
 ---
 
@@ -66,25 +66,29 @@ after-sales-system/
 ## 2. Local Setup & Execution Guide (XAMPP Environment)
 
 ### Step 1: Copy to Web Root
+
 Copy or link the `after-sales-system` directory into your XAMPP web server directory:
+
 ```
 C:\xampp\htdocs\after-sales-system
 ```
 
 ### Step 2: Database Initialization
+
 1. Start **Apache** and **MySQL** in your XAMPP Control Panel.
 2. Open **phpMyAdmin** in your browser (`http://localhost/phpmyadmin`).
 3. Click on **Import** and select [`database/schema.sql`](./database/schema.sql) (Creates `assis_db` and all relational tables).
 
-   *(Note: Alternatively, ASSIS automatically creates the database and executes `schema.sql` on first launch only when the configured database does not exist.)*
+   _(Note: Alternatively, ASSIS automatically creates the database and executes `schema.sql` on first launch only when the configured database does not exist.)_
 
    If the database already exists but its tables are missing, automatic initialization will not run. Import [`database/schema.sql`](./database/schema.sql) manually through phpMyAdmin to create the tables. The schema targets `assis_db`, so make sure this matches the database configured by `DB_NAME`.
 
-   For an existing database, also run [`database/migrations/001_create_login_attempts.sql`](./database/migrations/001_create_login_attempts.sql) and [`database/migrations/002_add_warranty_invoice_coverage.sql`](./database/migrations/002_add_warranty_invoice_coverage.sql) in phpMyAdmin.
+   For an existing database, also run [`database/migrations/002_add_warranty_invoice_coverage.sql`](./database/migrations/002_add_warranty_invoice_coverage.sql) in phpMyAdmin.
 
    Warranty coverage is applied automatically when a repair is completed between the registered warranty start and end dates, inclusive. Covered invoices show `No Charge` with a zero balance; warranty terms are stored for reference and are not interpreted by the system.
 
 ### Step 3: First-Run Administrator Registration
+
 1. Configure a random `INITIAL_ADMIN_SETUP_KEY` of at least 32 characters for PHP/Apache. For XAMPP, add `SetEnv INITIAL_ADMIN_SETUP_KEY "your-long-random-key"` to the Apache configuration and restart Apache. Do not commit the key.
 2. Navigate to the application in any web browser:
    ```
@@ -101,7 +105,6 @@ C:\xampp\htdocs\after-sales-system
 - Session cookies use `HttpOnly`, `SameSite=Lax`, strict session IDs, and cookie-only transport.
 - Authenticated sessions are revalidated against the user's active account on each protected request and expire after 30 minutes of inactivity.
 - Application-generated report times use the `Africa/Nairobi` timezone.
-- Login attempts are limited to five failures per username or client IP in a 15-minute window; locked buckets expire after 15 minutes. Ensure `LOGIN_ATTEMPTS` exists by importing the schema or applying the migration above.
 - New and reset passwords must be at least 8 characters and no more than 72 bytes (the current bcrypt input limit). Existing accounts are not forcibly reset.
 
 ---
@@ -110,11 +113,11 @@ C:\xampp\htdocs\after-sales-system
 
 ASSIS strictly enforces Role-Based Access Control (RBAC) across three operational roles:
 
-| Role | Operational Scope | Account Creation |
-|---|---|---|
-| **Service Manager (Admin)** | Full administrative control, technician management, inventory, management reports, and staff user management. | Created during initial system setup (`/auth/register.php`). |
-| **Front Desk / Reception** | Customer registration, equipment linking, service request logging, invoice distribution, feedback collection. | Registered by Administrator under **Settings > Staff Users**. |
-| **Technician** | Access assigned work orders on the Technician Workbench (`/technicians/workbench.php`), record actions taken, consume spare parts. | Registered by Administrator under **Settings > Staff Users** and linked to a Technician specialist record. |
+| Role                        | Operational Scope                                                                                                                  | Account Creation                                                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Service Manager (Admin)** | Full administrative control, technician management, inventory, management reports, and staff user management.                      | Created during initial system setup (`/auth/register.php`).                                                |
+| **Front Desk / Reception**  | Customer registration, equipment linking, service request logging, invoice distribution, feedback collection.                      | Registered by Administrator under **Settings > Staff Users**.                                              |
+| **Technician**              | Access assigned work orders on the Technician Workbench (`/technicians/workbench.php`), record actions taken, consume spare parts. | Registered by Administrator under **Settings > Staff Users** and linked to a Technician specialist record. |
 
 ---
 

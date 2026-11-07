@@ -3,8 +3,8 @@
 -- Database Schema Definition (MySQL)
 -- Reference: sameera.md (Chapter Five, Section 5.2.3)
 -- =====================================================================
-
 CREATE DATABASE IF NOT EXISTS `assis_db` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 USE `assis_db`;
 
 -- 1. TECHNICIAN Table (Table 5.5)
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS `TECHNICIAN` (
     `Specialization` VARCHAR(100) NOT NULL,
     `Phone` VARCHAR(20) NULL,
     `Availability` ENUM('Available', 'Busy', 'On Leave') NOT NULL DEFAULT 'Available'
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 2. USERS Table (System Authentication & Role-Based Access Control)
 CREATE TABLE IF NOT EXISTS `USERS` (
@@ -26,16 +26,10 @@ CREATE TABLE IF NOT EXISTS `USERS` (
     `RelatedTechnicianID` INT NULL,
     `IsActive` TINYINT(1) NOT NULL DEFAULT 1,
     `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT `fk_user_technician` FOREIGN KEY (`RelatedTechnicianID`) REFERENCES `TECHNICIAN` (`TechnicianID`) ON DELETE SET NULL
-) ENGINE=InnoDB;
-
--- LOGIN_ATTEMPTS (Persistent login throttling buckets)
-CREATE TABLE IF NOT EXISTS `LOGIN_ATTEMPTS` (
-    `AttemptKey` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
-    `FailedAttempts` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
-    `WindowStartedAt` DATETIME NOT NULL,
-    `LockedUntil` DATETIME NULL
-) ENGINE=InnoDB;
+    CONSTRAINT `fk_user_technician` FOREIGN KEY (`RelatedTechnicianID`) REFERENCES `TECHNICIAN` (`TechnicianID`) ON DELETE
+    SET
+        NULL
+) ENGINE = InnoDB;
 
 -- CUSTOMER Table (Table 5.2)
 CREATE TABLE IF NOT EXISTS `CUSTOMER` (
@@ -45,7 +39,7 @@ CREATE TABLE IF NOT EXISTS `CUSTOMER` (
     `Email` VARCHAR(100) NULL,
     `PhysicalAddress` VARCHAR(150) NULL,
     `DateRegistered` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 4. PRODUCT Table (Table 5.3)
 CREATE TABLE IF NOT EXISTS `PRODUCT` (
@@ -57,7 +51,7 @@ CREATE TABLE IF NOT EXISTS `PRODUCT` (
     `PurchaseDate` DATE NULL,
     UNIQUE KEY `uk_product_customer` (`ProductID`, `CustomerID`),
     CONSTRAINT `fk_product_customer` FOREIGN KEY (`CustomerID`) REFERENCES `CUSTOMER` (`CustomerID`) ON DELETE CASCADE
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 5. WARRANTY Table (Table 5.4)
 CREATE TABLE IF NOT EXISTS `WARRANTY` (
@@ -67,7 +61,7 @@ CREATE TABLE IF NOT EXISTS `WARRANTY` (
     `EndDate` DATE NOT NULL,
     `Terms` TEXT NULL,
     CONSTRAINT `fk_warranty_product` FOREIGN KEY (`ProductID`) REFERENCES `PRODUCT` (`ProductID`) ON DELETE CASCADE
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 6. SERVICE_REQUEST Table (Table 5.6)
 CREATE TABLE IF NOT EXISTS `SERVICE_REQUEST` (
@@ -82,8 +76,10 @@ CREATE TABLE IF NOT EXISTS `SERVICE_REQUEST` (
     CONSTRAINT `fk_request_customer` FOREIGN KEY (`CustomerID`) REFERENCES `CUSTOMER` (`CustomerID`),
     CONSTRAINT `fk_request_product` FOREIGN KEY (`ProductID`) REFERENCES `PRODUCT` (`ProductID`),
     CONSTRAINT `fk_request_product_customer` FOREIGN KEY (`ProductID`, `CustomerID`) REFERENCES `PRODUCT` (`ProductID`, `CustomerID`) ON UPDATE CASCADE,
-    CONSTRAINT `fk_request_technician` FOREIGN KEY (`TechnicianID`) REFERENCES `TECHNICIAN` (`TechnicianID`) ON DELETE SET NULL
-) ENGINE=InnoDB;
+    CONSTRAINT `fk_request_technician` FOREIGN KEY (`TechnicianID`) REFERENCES `TECHNICIAN` (`TechnicianID`) ON DELETE
+    SET
+        NULL
+) ENGINE = InnoDB;
 
 -- 7. SERVICE_RECORD Table (Table 5.7)
 CREATE TABLE IF NOT EXISTS `SERVICE_RECORD` (
@@ -91,9 +87,9 @@ CREATE TABLE IF NOT EXISTS `SERVICE_RECORD` (
     `RequestID` INT NOT NULL UNIQUE,
     `ActionsTaken` TEXT NOT NULL,
     `CompletionDate` DATE NULL,
-    `LabourCost` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    `LabourCost` DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     CONSTRAINT `fk_record_request` FOREIGN KEY (`RequestID`) REFERENCES `SERVICE_REQUEST` (`RequestID`) ON DELETE CASCADE
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 8. SPARE_PART Table (Table 5.8)
 CREATE TABLE IF NOT EXISTS `SPARE_PART` (
@@ -101,9 +97,9 @@ CREATE TABLE IF NOT EXISTS `SPARE_PART` (
     `PartName` VARCHAR(100) NOT NULL,
     `QuantityInStock` INT NOT NULL DEFAULT 0,
     `ReorderLevel` INT NOT NULL DEFAULT 5,
-    `UnitPrice` DECIMAL(10,2) NOT NULL,
+    `UnitPrice` DECIMAL(10, 2) NOT NULL,
     CONSTRAINT `chk_stock_positive` CHECK (`QuantityInStock` >= 0)
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 9. PARTS_USED Table (Associative Entity, Table 5.9)
 CREATE TABLE IF NOT EXISTS `PARTS_USED` (
@@ -114,18 +110,18 @@ CREATE TABLE IF NOT EXISTS `PARTS_USED` (
     CONSTRAINT `fk_partsused_record` FOREIGN KEY (`RecordID`) REFERENCES `SERVICE_RECORD` (`RecordID`) ON DELETE CASCADE,
     CONSTRAINT `fk_partsused_part` FOREIGN KEY (`PartID`) REFERENCES `SPARE_PART` (`PartID`),
     CONSTRAINT `chk_qty_positive` CHECK (`QuantityUsed` > 0)
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 10. INVOICE Table (Table 5.10)
 CREATE TABLE IF NOT EXISTS `INVOICE` (
     `InvoiceID` INT AUTO_INCREMENT PRIMARY KEY,
     `RequestID` INT NOT NULL UNIQUE,
-    `AmountDue` DECIMAL(10,2) NOT NULL,
+    `AmountDue` DECIMAL(10, 2) NOT NULL,
     `WarrantyApplied` TINYINT(1) NOT NULL DEFAULT 0,
     `PaymentStatus` ENUM('Unpaid', 'Paid', 'Partially Paid', 'No Charge') NOT NULL DEFAULT 'Unpaid',
     `DateIssued` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT `fk_invoice_request` FOREIGN KEY (`RequestID`) REFERENCES `SERVICE_REQUEST` (`RequestID`) ON DELETE CASCADE
-) ENGINE=InnoDB;
+) ENGINE = InnoDB;
 
 -- 11. FEEDBACK Table (Table 5.11)
 CREATE TABLE IF NOT EXISTS `FEEDBACK` (
@@ -135,5 +131,8 @@ CREATE TABLE IF NOT EXISTS `FEEDBACK` (
     `Comments` TEXT NULL,
     `FeedbackDate` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT `fk_feedback_request` FOREIGN KEY (`RequestID`) REFERENCES `SERVICE_REQUEST` (`RequestID`) ON DELETE CASCADE,
-    CONSTRAINT `chk_rating_range` CHECK (`Rating` >= 1 AND `Rating` <= 5)
-) ENGINE=InnoDB;
+    CONSTRAINT `chk_rating_range` CHECK (
+        `Rating` >= 1
+        AND `Rating` <= 5
+    )
+) ENGINE = InnoDB;

@@ -1,3 +1,4 @@
 *.db
 .claude/
 .github/instructions
+.playwright-mcp

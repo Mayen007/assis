@@ -5,7 +5,7 @@
 **Institution:** Mount Kenya University – School of Computing and Informatics  
 **Reference Document:** [sameera.md](./sameera.md)  
 **Development Methodology:** Rapid Application Development (RAD) (Martin, 1991)  
-**Architecture Pattern:** Three-Tier Architecture (Presentation, Application, Data)  
+**Architecture Pattern:** Three-Tier Architecture (Presentation, Application, Data)
 
 ---
 
@@ -46,13 +46,13 @@ graph TD
 
 ### 1.2 Technology Stack
 
-| Layer / Aspect | Selected Technology | Purpose & Specification |
-|---|---|---|
-| **Front-End (Presentation)** | HTML5, CSS3, JavaScript, Bootstrap 5 | Responsive UI, input forms, modals, tables, and real-time client validation. |
-| **Back-End (Application)** | PHP (8.x) | Request routing, session management, transaction logic, business calculations. |
-| **Database (Data)** | MySQL (8.x / MariaDB) | Relational persistence, relational integrity, foreign key cascades, triggers. |
-| **Server Runtime** | Apache HTTP Server (XAMPP Environment) | Local web and database execution runtime. |
-| **Version Control** | Git | Source code and database migration versioning. |
+| Layer / Aspect               | Selected Technology                    | Purpose & Specification                                                        |
+| ---------------------------- | -------------------------------------- | ------------------------------------------------------------------------------ |
+| **Front-End (Presentation)** | HTML5, CSS3, JavaScript, Bootstrap 5   | Responsive UI, input forms, modals, tables, and real-time client validation.   |
+| **Back-End (Application)**   | PHP (8.x)                              | Request routing, session management, transaction logic, business calculations. |
+| **Database (Data)**          | MySQL (8.x / MariaDB)                  | Relational persistence, relational integrity, foreign key cascades, triggers.  |
+| **Server Runtime**           | Apache HTTP Server (XAMPP Environment) | Local web and database execution runtime.                                      |
+| **Version Control**          | Git                                    | Source code and database migration versioning.                                 |
 
 ---
 
@@ -92,20 +92,20 @@ graph TD
 
 ### 3.1 Permission Matrix
 
-| Module / Operation | Reception / Front Desk | Technician | Manager / Administrator |
-|---|:---:|:---:|:---:|
-| **Customer Management (CRUD)** | Read / Write | Read Only | Full Access |
-| **Product & Warranty Registration** | Read / Write | Read Only | Full Access |
-| **Log New Service Request** | Create / Read | No Access | Full Access |
-| **Assign Technician to Request** | No Access | No Access | Full Access |
-| **Update Request Status** | Read Only | Update (`In Progress`, `Completed`) | Full Access |
-| **Log Repair Actions & Parts Used** | No Access | Create / Write | Full Access |
-| **Inventory: View Stock & Alerts** | Read Only | Read Only | Full Access |
-| **Inventory: Stock In / Adjust** | No Access | No Access | Full Access |
-| **Invoice Generation & Payment Status** | Generate / Read / Update | Read Only | Full Access |
-| **Capture Customer Feedback** | Create / Read | Read Only | Full Access |
-| **Management Reports & Analytics** | No Access | No Access | Generate / Export / View |
-| **User & Technician Account Setup** | No Access | No Access | Full Access |
+| Module / Operation                      |  Reception / Front Desk  |             Technician              | Manager / Administrator  |
+| --------------------------------------- | :----------------------: | :---------------------------------: | :----------------------: |
+| **Customer Management (CRUD)**          |       Read / Write       |              Read Only              |       Full Access        |
+| **Product & Warranty Registration**     |       Read / Write       |              Read Only              |       Full Access        |
+| **Log New Service Request**             |      Create / Read       |              No Access              |       Full Access        |
+| **Assign Technician to Request**        |        No Access         |              No Access              |       Full Access        |
+| **Update Request Status**               |        Read Only         | Update (`In Progress`, `Completed`) |       Full Access        |
+| **Log Repair Actions & Parts Used**     |        No Access         |           Create / Write            |       Full Access        |
+| **Inventory: View Stock & Alerts**      |        Read Only         |              Read Only              |       Full Access        |
+| **Inventory: Stock In / Adjust**        |        No Access         |              No Access              |       Full Access        |
+| **Invoice Generation & Payment Status** | Generate / Read / Update |              Read Only              |       Full Access        |
+| **Capture Customer Feedback**           |      Create / Read       |              Read Only              |       Full Access        |
+| **Management Reports & Analytics**      |        No Access         |              No Access              | Generate / Export / View |
+| **User & Technician Account Setup**     |        No Access         |              No Access              |       Full Access        |
 
 ---
 
@@ -260,6 +260,7 @@ CREATE TABLE `FEEDBACK` (
 ## 5. Functional Module Specifications & Logic Rules
 
 ### 5.1 Service Request Lifecycle Engine
+
 Every service request transitions through a strict sequential state lifecycle:
 
 ```mermaid
@@ -279,9 +280,11 @@ stateDiagram-v2
 The implementation stores only each request's current `Status` and `TechnicianID`, plus request and service-record dates. It does not store status-change or assignment/reassignment events, previous values, a user ID for each change, or a timestamp for each change. Therefore, prior statuses, prior assignees, who performed a change, and when it occurred cannot be reconstructed. “Customer service history” means the customer's linked requests and service records only; it is not a full audit trail or status history. The proposal's statement about timestamped records and user attributions is an intended benefit, not a capability currently implemented.
 
 ### 5.2 Inventory Deduction & Atomic Transaction
+
 When a technician submits the repair record with spare parts used, the system executes an atomic transaction in MySQL:
 
 $$\text{BEGIN TRANSACTION}$$
+
 1. Insert `SERVICE_RECORD` with `LabourCost` and `ActionsTaken`.
 2. For each part specified in `PARTS_USED`:
    - Verify `SPARE_PART.QuantityInStock >= QuantityUsed`.
@@ -290,9 +293,10 @@ $$\text{BEGIN TRANSACTION}$$
      $$\text{QuantityInStock} = \text{QuantityInStock} - \text{QuantityUsed}$$
 3. Trigger Low-Stock Notification if:
    $$\text{QuantityInStock} \le \text{ReorderLevel}$$
-$$\text{COMMIT TRANSACTION}$$
+   $$\text{COMMIT TRANSACTION}$$
 
 ### 5.3 Automated Invoicing Algorithm
+
 In accordance with Section 4.1.1 (FR8), invoices are automatically computed:
 
 $$\text{PartsTotal} = \sum_{i=1}^{n} \left( \text{PARTS\_USED.QuantityUsed}_i \times \text{SPARE\_PART.UnitPrice}_i \right)$$
@@ -304,7 +308,9 @@ If the service completion date falls within the product's inclusive warranty sta
 Payment tracking is status-based only. Staff can change a non-warranty invoice's status to `Unpaid`, `Paid`, or `Partially Paid`, but the system does not record individual payment transactions, amounts received, payment dates, methods, or transaction references. It therefore cannot calculate how much has been paid or remains due. `Partially Paid` is an informational status, not a reconciled partial-payment record. Transaction-level tracking would require a separate `PAYMENT` table and workflow; that is outside the current project scope. `No Charge` is reserved for invoices fully covered by a date-valid warranty.
 
 ### 5.4 Management Reporting Engine
+
 In accordance with Section 5.4, the reporting engine generates formatted, tabular data with export/print layouts:
+
 1. **Service Request Status Report:** Summarizes total tickets grouped by `Status` (`Total`, `Pending`, `In Progress`, `Completed`, `Closed`) within selectable date ranges.
 2. **Technician Workload Report:** Metrics per technician: Active tickets, completed repairs, mean turnaround time, and utilization.
 3. **Inventory & Low-Stock Alerts Report:** Active parts catalogue displaying `QuantityInStock`, `ReorderLevel`, and flagging items where $\text{QuantityInStock} \le \text{ReorderLevel}$.
@@ -316,15 +322,15 @@ In accordance with Section 5.4, the reporting engine generates formatted, tabula
 
 In accordance with Section 5.3 and Figures 5.2–5.5 in [sameera.md](./sameera.md):
 
-| Screen / Interface | Target Role | Key Input Controls & Validations | Output Generated |
-|---|---|---|---|
-| **Login Interface (Fig 5.2)** | All Users | Username, Password, Role selector | Session token, redirect to role dashboard |
-| **Customer Registration (Fig 5.3)** | Front Desk / Admin | FullName (text), PhoneNumber (regex, unique), Email, PhysicalAddress | Created Customer ID, Customer Profile |
-| **New Service Request (Fig 5.4)** | Front Desk / Admin | Customer Search, Product Dropdown, IssueDescription (textarea), Priority (select) | Ticket Number (RequestID), Printable Job Slip |
-| **Technician Workbench** | Technician | ActionsTaken (textarea), LabourCost (decimal), Spare Parts Multi-Select & Quantity | Service Record, Stock deduction receipt |
-| **Invoicing Screen** | Front Desk / Admin | Request ID selector, Payment Status toggle (`Unpaid`, `Paid`, `Partially Paid`); no payment amount or transaction entry | Formatted Printable Service Invoice |
-| **Customer Feedback Form** | Front Desk / Customer | Rating (1 to 5 star radio/select), Comments (textarea) | Feedback acknowledgement |
-| **Status Report Screen (Fig 5.5)** | Manager / Admin | Date range filter (`StartDate`, `EndDate`) | Tabular Report & Printable Summary Sheet |
+| Screen / Interface                  | Target Role           | Key Input Controls & Validations                                                                                        | Output Generated                              |
+| ----------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| **Login Interface (Fig 5.2)**       | All Users             | Username, Password, Role selector                                                                                       | Session token, redirect to role dashboard     |
+| **Customer Registration (Fig 5.3)** | Front Desk / Admin    | FullName (text), PhoneNumber (regex, unique), Email, PhysicalAddress                                                    | Created Customer ID, Customer Profile         |
+| **New Service Request (Fig 5.4)**   | Front Desk / Admin    | Customer Search, Product Dropdown, IssueDescription (textarea), Priority (select)                                       | Ticket Number (RequestID), Printable Job Slip |
+| **Technician Workbench**            | Technician            | ActionsTaken (textarea), LabourCost (decimal), Spare Parts Multi-Select & Quantity                                      | Service Record, Stock deduction receipt       |
+| **Invoicing Screen**                | Front Desk / Admin    | Request ID selector, Payment Status toggle (`Unpaid`, `Paid`, `Partially Paid`); no payment amount or transaction entry | Formatted Printable Service Invoice           |
+| **Customer Feedback Form**          | Front Desk / Customer | Rating (1 to 5 star radio/select), Comments (textarea)                                                                  | Feedback acknowledgement                      |
+| **Status Report Screen (Fig 5.5)**  | Manager / Admin       | Date range filter (`StartDate`, `EndDate`)                                                                              | Tabular Report & Printable Summary Sheet      |
 
 ---
 
@@ -334,7 +340,6 @@ Directly satisfying Section 4.1.2 of the proposal:
 
 1. **Authentication & Session Security:**
    - Password hashing using PHP `password_hash()` with `PASSWORD_BCRYPT`; new and reset passwords require at least 8 characters and no more than 72 bytes.
-   - Login attempts are limited to five failures per normalized username or client IP per 15-minute window.
    - Session IDs use strict mode and cookie-only transport. Session cookies use `HttpOnly` and `SameSite=Lax`, and are marked `Secure` over HTTPS or when `APP_ENV=production`.
    - Production deployment requires HTTPS; reverse-proxy deployments must configure `APP_ENV=production`.
 2. **SQL Injection Defense:**
@@ -349,4 +354,4 @@ Directly satisfying Section 4.1.2 of the proposal:
 
 ---
 
-*Specification derived faithfully from the After-Sales Service Information System Proposal ([sameera.md](./sameera.md)).*
+_Specification derived faithfully from the After-Sales Service Information System Proposal ([sameera.md](./sameera.md))._

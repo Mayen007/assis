@@ -1,8 +1,0 @@
-USE `assis_db`;
-
-CREATE TABLE IF NOT EXISTS `LOGIN_ATTEMPTS` (
-    `AttemptKey` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin PRIMARY KEY,
-    `FailedAttempts` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
-    `WindowStartedAt` DATETIME NOT NULL,
-    `LockedUntil` DATETIME NULL
-) ENGINE=InnoDB;

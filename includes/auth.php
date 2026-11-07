@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Authentication & Role-Based Access Control (RBAC) Module
  * After-Sales Service Information System (ASSIS)
@@ -9,14 +10,16 @@ require_once __DIR__ . '/../config/database.php';
 /**
  * Checks if a user is currently authenticated.
  */
-function is_logged_in(): bool {
+function is_logged_in(): bool
+{
     return !empty($_SESSION['user_id']);
 }
 
 /**
  * Retrieves the currently logged-in user details.
  */
-function current_user(): ?array {
+function current_user(): ?array
+{
     if (!is_logged_in()) {
         return null;
     }
@@ -34,7 +37,8 @@ function current_user(): ?array {
 /**
  * Ensures the user is logged in, otherwise redirects to the login screen.
  */
-function require_login(): void {
+function require_login(): void
+{
     if (!is_logged_in()) {
         set_flash('warning', 'Please sign in to access this page.');
         header('Location: ' . base_url('auth/login.php'));
@@ -71,7 +75,8 @@ function require_login(): void {
     $_SESSION['last_activity'] = $now;
 }
 
-function revoke_login_session(string $message, string $type = 'warning'): void {
+function revoke_login_session(string $message, string $type = 'warning'): void
+{
     $_SESSION = [];
     session_regenerate_id(true);
     set_flash($type, $message);
@@ -83,7 +88,8 @@ function revoke_login_session(string $message, string $type = 'warning'): void {
  * Checks if the current user possesses one of the allowed roles.
  * @param string|array $allowedRoles
  */
-function has_role(string|array $allowedRoles): bool {
+function has_role(string|array $allowedRoles): bool
+{
     if (!is_logged_in()) {
         return false;
     }
@@ -100,7 +106,8 @@ function has_role(string|array $allowedRoles): bool {
  * Enforces role restriction. Halts with 403 Forbidden if user lacks required role.
  * @param string|array $allowedRoles
  */
-function require_role(string|array $allowedRoles): void {
+function require_role(string|array $allowedRoles): void
+{
     require_login();
 
     if (!has_role($allowedRoles)) {
@@ -114,7 +121,8 @@ function require_role(string|array $allowedRoles): void {
 /**
  * Logs in a verified user by populating session variables.
  */
-function login_user(array $user): void {
+function login_user(array $user): void
+{
     session_regenerate_id(true);
     $_SESSION['user_id']       = $user['UserID'];
     $_SESSION['username']      = $user['Username'];
@@ -127,7 +135,8 @@ function login_user(array $user): void {
 /**
  * Returns a validation message for a password that violates the bcrypt policy.
  */
-function password_policy_error(string $password): ?string {
+function password_policy_error(string $password): ?string
+{
     if (strlen($password) < 8) {
         return 'Password must be at least 8 characters long.';
     }
@@ -140,102 +149,10 @@ function password_policy_error(string $password): ?string {
 }
 
 /**
- * Starts a serialized login attempt and returns its locked rate-limit keys.
- * A null result means at least one key is currently locked.
- */
-function begin_login_attempt(PDO $db, string $username, string $ipAddress): ?array {
-    $keys = [
-        hash('sha256', 'username:' . strtolower(trim($username))),
-        hash('sha256', 'ip:' . $ipAddress),
-    ];
-    sort($keys, SORT_STRING);
-
-    $db->exec("
-        DELETE FROM LOGIN_ATTEMPTS
-        WHERE WindowStartedAt < UTC_TIMESTAMP() - INTERVAL 1 DAY
-          AND (LockedUntil IS NULL OR LockedUntil < UTC_TIMESTAMP())
-    ");
-    $db->beginTransaction();
-
-    try {
-        $insert = $db->prepare("
-            INSERT INTO LOGIN_ATTEMPTS (AttemptKey, FailedAttempts, WindowStartedAt, LockedUntil)
-            VALUES (:attempt_key, 0, UTC_TIMESTAMP(), NULL)
-            ON DUPLICATE KEY UPDATE AttemptKey = VALUES(AttemptKey)
-        ");
-        $select = $db->prepare("
-            SELECT FailedAttempts,
-                   WindowStartedAt < UTC_TIMESTAMP() - INTERVAL 15 MINUTE AS WindowExpired,
-                   LockedUntil > UTC_TIMESTAMP() AS IsLocked
-            FROM LOGIN_ATTEMPTS
-            WHERE AttemptKey = :attempt_key
-            FOR UPDATE
-        ");
-        $reset = $db->prepare("
-            UPDATE LOGIN_ATTEMPTS
-            SET FailedAttempts = 0, WindowStartedAt = UTC_TIMESTAMP(), LockedUntil = NULL
-            WHERE AttemptKey = :attempt_key
-        ");
-
-        foreach ($keys as $key) {
-            $insert->execute([':attempt_key' => $key]);
-            $select->execute([':attempt_key' => $key]);
-            $attempt = $select->fetch();
-
-            if ((int)$attempt['IsLocked'] === 1) {
-                $db->rollBack();
-                return null;
-            }
-
-            if ((int)$attempt['WindowExpired'] === 1) {
-                $reset->execute([':attempt_key' => $key]);
-            }
-        }
-
-        return $keys;
-    } catch (Throwable $e) {
-        if ($db->inTransaction()) {
-            $db->rollBack();
-        }
-        throw $e;
-    }
-}
-
-/**
- * Commits a failed login count or clears the counters after successful login.
- */
-function finish_login_attempt(PDO $db, array $keys, bool $isSuccessful): void {
-    if ($isSuccessful) {
-        $delete = $db->prepare('DELETE FROM LOGIN_ATTEMPTS WHERE AttemptKey = :attempt_key');
-        foreach ($keys as $key) {
-            $delete->execute([':attempt_key' => $key]);
-        }
-    } else {
-        $select = $db->prepare('SELECT FailedAttempts FROM LOGIN_ATTEMPTS WHERE AttemptKey = :attempt_key FOR UPDATE');
-        $update = $db->prepare("
-            UPDATE LOGIN_ATTEMPTS
-            SET FailedAttempts = :failed_attempts,
-                LockedUntil = IF(:should_lock = 1, DATE_ADD(UTC_TIMESTAMP(), INTERVAL 15 MINUTE), NULL)
-            WHERE AttemptKey = :attempt_key
-        ");
-        foreach ($keys as $key) {
-            $select->execute([':attempt_key' => $key]);
-            $failedAttempts = (int)$select->fetchColumn() + 1;
-            $update->execute([
-                ':failed_attempts' => $failedAttempts,
-                ':should_lock' => $failedAttempts >= 5 ? 1 : 0,
-                ':attempt_key' => $key,
-            ]);
-        }
-    }
-
-    $db->commit();
-}
-
-/**
  * Terminates user session.
  */
-function logout_user(): void {
+function logout_user(): void
+{
     $_SESSION = [];
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
